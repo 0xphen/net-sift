@@ -17,6 +17,8 @@
 
 use super::{constants, errors::EthernetFrameError};
 
+use std::fmt;
+
 const MAC_ADDRESS_BYTES: usize = 6;
 
 /// Represents a MAC address.
@@ -36,14 +38,12 @@ impl MacAddress {
     pub fn from_bytes(bytes: [u8; MAC_ADDRESS_BYTES]) -> Self {
         MacAddress(bytes)
     }
+}
 
-    /// Converts the MAC address to its string representation.
-    ///
-    /// # Returns
-    ///
-    /// * A string representation of the MAC address in the format `XX:XX:XX:XX:XX:XX`.
-    pub fn to_string(&self) -> String {
-        format!(
+impl fmt::Display for MacAddress {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
             "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
             self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5]
         )
@@ -119,27 +119,14 @@ impl EthernetFrame {
         }
 
         // Directly extract potential MAC addresses and EtherType
-        let mac_destination_bytes: [u8; 6] = frame[OFFSET_MAC_DEST..OFFSET_MAC_DEST + 6]
-            .try_into()
-            .map_err(|e| EthernetFrameError::MacAddressExtractionError { source: e })?;
+        let mac_destination_bytes: [u8; 6] =
+            EthernetFrame::extract_mac_address(&frame, OFFSET_MAC_DEST)?;
 
-        let mac_source_bytes: [u8; 6] = frame[OFFSET_MAC_SRC..OFFSET_MAC_SRC + 6]
-            .try_into()
-            .map_err(|e| EthernetFrameError::MacAddressExtractionError { source: e })?;
+        let mac_source_bytes: [u8; 6] = Self::extract_mac_address(&frame, OFFSET_MAC_SRC)?;
 
-        let (q_tag, ether_type_offset) = match &frame[OFFSET_TPID..OFFSET_TPID + 2] {
-            [81, 00] => {
-                let q_tag_bytes: [u8; 4] = frame[OFFSET_TPID..OFFSET_TPID + 4]
-                    .try_into()
-                    .map_err(|e| EthernetFrameError::QTagExtractionError { source: e })?;
-                (Some(q_tag_bytes), OFFSET_TPID + 4)
-            }
-            _ => (None, OFFSET_TPID),
-        };
+        let (q_tag, ether_type_offset) = Self::extract_q_tag(&frame, OFFSET_TPID)?;
 
-        let ether_type: [u8; 2] = frame[ether_type_offset..ether_type_offset + 2]
-            .try_into()
-            .map_err(|e| EthernetFrameError::EtherTypeExtractionError { source: e })?;
+        let ether_type: [u8; 2] = Self::extract_ether_type(&frame, ether_type_offset)?;
 
         if !constants::ACCEPTED_ETHERTYPES.contains(&ether_type) {
             return Err(EthernetFrameError::InvalidEtherType);
@@ -157,5 +144,118 @@ impl EthernetFrame {
             fcs,
             payload: frame[ether_type_offset + 2..(frame.len() - 4)].to_vec(),
         })
+    }
+
+    /// Extracts a MAC address from the ethernet frame based on a specified offset.
+    ///
+    /// The function attempts to retrieve a MAC address, typically used for
+    /// either source or destination MAC extraction, starting from the given offset.
+    ///
+    /// # Arguments
+    ///
+    /// * `frame` - The byte slice representing the ethernet frame.
+    /// * `offset` - Starting index within `frame` where the MAC address is expected to begin.
+    ///
+    /// # Returns
+    ///
+    /// * `Ok` with the MAC address as a byte array if extraction is successful.
+    /// * `Err` with an associated `EthernetFrameError` detailing the cause of the failure.
+    ///
+    /// # Errors
+    ///
+    /// * `EthernetFrameError::InvalidMacBytes` if the frame doesn't contain
+    /// enough bytes from the offset to extract a MAC address.
+    /// * `EthernetFrameError::MacAddressExtractionError` if there's an issue
+    ///  during the extraction process.
+    fn extract_mac_address(frame: &[u8], offset: usize) -> Result<[u8; 6], EthernetFrameError> {
+        if frame.len() < offset + 6 {
+            return Err(EthernetFrameError::FrameTooShort(
+                frame.len(),
+                6,
+                "Src/Dest MAC Address".to_string(),
+            ));
+        }
+
+        frame[offset..offset + 6]
+            .try_into()
+            .map_err(|e| EthernetFrameError::MacAddressExtractionError { source: e })
+    }
+
+    /// Extracts the EtherType from an Ethernet frame.
+    ///
+    /// The EtherType field in an Ethernet frame identifies the next level protocol
+    /// (for example, IPv4 or IPv6). This function extracts the EtherType based on
+    /// a given offset.
+    ///
+    /// # Arguments
+    ///
+    /// * `frame` - A reference to the slice representing the Ethernet frame.
+    /// * `offset` - The starting index in the frame where the EtherType is expected.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing a two-byte array representing the EtherType.
+    /// In case of an error (like if the frame is too short to contain the EtherType at the given offset),
+    /// it returns an `EthernetFrameError`.
+    fn extract_ether_type(frame: &[u8], offset: usize) -> Result<[u8; 2], EthernetFrameError> {
+        if frame.len() < offset + 2 {
+            return Err(EthernetFrameError::FrameTooShort(
+                frame.len(),
+                2,
+                "Ether-Type".to_string(),
+            ));
+        }
+
+        frame[offset..offset + 2]
+            .try_into()
+            .map_err(|e| EthernetFrameError::EtherTypeExtractionError { source: e })
+    }
+
+    /// Extracts the Q-Tag (VLAN tag) from an Ethernet frame, if present.
+    ///
+    /// The Q-Tag is an optional 4-byte field in an Ethernet frame that signifies
+    /// VLAN membership and priority information. The first two bytes of this tag
+    /// are typically `0x8100`, which is used to indicate its presence.
+    ///
+    /// # Arguments
+    ///
+    /// * `frame`: A slice representing the Ethernet frame.
+    /// * `offset`: The starting position in the frame where the Q-Tag might be present.
+    ///
+    /// # Returns
+    ///
+    /// If successful, this function returns a tuple containing:
+    /// 1. An `Option<[u8; 4]>` representing the Q-Tag bytes if present; `None` otherwise.
+    /// 2. The next reading offset after the Q-Tag (or after where it would have been, if not present).
+    ///
+    /// If there's an error, it returns an `EthernetFrameError`.
+    ///
+    /// # Errors
+    ///
+    /// This function can return an error if:
+    /// - The frame is too short to contain the expected Q-Tag bytes.
+    /// - There's an issue extracting the Q-Tag bytes.
+    ///
+    fn extract_q_tag(
+        frame: &[u8],
+        offset: usize,
+    ) -> Result<(Option<[u8; 4]>, usize), EthernetFrameError> {
+        if frame.len() < offset + 4 {
+            return Err(EthernetFrameError::FrameTooShort(
+                frame.len(),
+                4,
+                "Q-Tag".to_string(),
+            ));
+        }
+
+        match &frame[offset..offset + 2] {
+            [81, 00] => {
+                let q_tag_bytes: [u8; 4] = frame[offset..offset + 4]
+                    .try_into()
+                    .map_err(|e| EthernetFrameError::QTagExtractionError { source: e })?;
+                Ok((Some(q_tag_bytes), offset + 4))
+            }
+            _ => Ok((None, offset)),
+        }
     }
 }

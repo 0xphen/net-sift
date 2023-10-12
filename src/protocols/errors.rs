@@ -8,6 +8,9 @@ pub enum EthernetFrameError {
         source: std::array::TryFromSliceError,
     },
 
+    #[error("Frame too short got `{0}`, expected `{1}` `{2}`")]
+    FrameTooShort(usize, usize, String),
+
     #[error("Failed to extract Q-Tag: {source}")]
     QTagExtractionError {
         #[source]
