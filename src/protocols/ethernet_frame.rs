@@ -62,24 +62,36 @@ const OFFSET_MAC_SRC: usize = 6;
 /// Offset for the TPID in an Ethernet frame, potentially indicating a VLAN tag.
 const OFFSET_TPID: usize = 12;
 
-/// Represents the structure of an Ethernet frame.
+/// An Ethernet frame representation.
+///
+/// The `EthernetFrame` struct models the structure of an Ethernet II frame,
+/// which is the most commonly used Ethernet frame type. The Ethernet frame
+/// carries data internally for protocols such as IP and ARP.
+///
+/// An Ethernet frame comprises several fields including destination and
+/// source MAC addresses, an optional VLAN tag (Q-tag), an EtherType field
+/// indicating the upper-layer protocol, the payload, and a Frame Check Sequence (FCS).
+///
+/// # Fields
+///
+/// * `mac_destination`: The MAC address of the receiving device.
+/// * `mac_source`: The MAC address of the sending device.
+/// * `q_tag`: An optional Q-tag field used in VLANs. If the frame is VLAN-tagged,
+///   this field will include the Tag Protocol Identifier (TPID) and the Tag Control Information (TCI).
+/// * `ether_type`: A field that indicates the protocol of the encapsulated payload.
+///   For example, `0x0800` indicates IPv4.
+/// * `payload`: The encapsulated data within the Ethernet frame. Its content and interpretation
+///   are determined by the `ether_type`.
+/// * `fcs`: The Frame Check Sequence (FCS) for error-checking. It's typically used to check the
+///   integrity of the transmitted data.
 #[derive(Debug)]
 pub struct EthernetFrame {
-    /// Destination MAC address of the frame.
-    pub mac_destination: MacAddress,
-
-    /// Source MAC address of the frame.
-    pub mac_source: MacAddress,
-
-    /// Optional Q-tag, present in VLAN-tagged frames. Includes TPID and TCI.
-    pub q_tag: Option<[u8; 4]>,
-
-    /// EtherType field indicating the upper-layer protocol.
-    pub ether_type: [u8; 2],
-
-    pub payload: Vec<u8>,
-
-    pub fcs: [u8; 4],
+    pub mac_destination: MacAddress, // Destination MAC address
+    pub mac_source: MacAddress,      // Source MAC address
+    pub q_tag: Option<[u8; 4]>,      // Optional Q-tag for VLAN-tagged frames
+    pub ether_type: [u8; 2],         // EtherType indicating the upper-layer protocol
+    pub payload: Vec<u8>,            // Frame's payload/data
+    pub fcs: [u8; 4],                // Frame Check Sequence for error-checking
 }
 
 impl EthernetFrame {
