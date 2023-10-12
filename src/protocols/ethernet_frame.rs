@@ -15,13 +15,13 @@
 // | FCS (4 bytes)             |
 // +---------------------------+
 
-use super::errors::EthernetFrameError;
+use super::{constants, errors::EthernetFrameError};
 
 const MAC_ADDRESS_BYTES: usize = 6;
 
 /// Represents a MAC address.
 #[derive(Debug)]
-pub struct MacAddress([u8; MAC_ADDRESS_BYTES]);
+pub struct MacAddress(pub [u8; MAC_ADDRESS_BYTES]);
 
 impl MacAddress {
     /// Constructs a `MacAddress` from a 6-byte array.
@@ -113,19 +113,23 @@ impl EthernetFrame {
     /// # Returns
     ///
     /// Returns an `EthernetFrame` instance populated with the extracted data.
-    pub fn new(data: Vec<u8>) -> Result<Self, EthernetFrameError> {
+    pub fn new(frame: Vec<u8>) -> Result<Self, EthernetFrameError> {
+        if frame.len() < constants::MIN_FRAME_SIZE {
+            return Err(EthernetFrameError::InvalidEthernetFrame(frame.len()));
+        }
+
         // Directly extract potential MAC addresses and EtherType
-        let mac_destination_bytes: [u8; 6] = data[OFFSET_MAC_DEST..OFFSET_MAC_DEST + 6]
+        let mac_destination_bytes: [u8; 6] = frame[OFFSET_MAC_DEST..OFFSET_MAC_DEST + 6]
             .try_into()
             .map_err(|e| EthernetFrameError::MacAddressExtractionError { source: e })?;
 
-        let mac_source_bytes: [u8; 6] = data[OFFSET_MAC_SRC..OFFSET_MAC_SRC + 6]
+        let mac_source_bytes: [u8; 6] = frame[OFFSET_MAC_SRC..OFFSET_MAC_SRC + 6]
             .try_into()
             .map_err(|e| EthernetFrameError::MacAddressExtractionError { source: e })?;
 
-        let (q_tag, ether_type_offset) = match &data[OFFSET_TPID..OFFSET_TPID + 2] {
+        let (q_tag, ether_type_offset) = match &frame[OFFSET_TPID..OFFSET_TPID + 2] {
             [81, 00] => {
-                let q_tag_bytes: [u8; 4] = data[OFFSET_TPID..OFFSET_TPID + 4]
+                let q_tag_bytes: [u8; 4] = frame[OFFSET_TPID..OFFSET_TPID + 4]
                     .try_into()
                     .map_err(|e| EthernetFrameError::QTagExtractionError { source: e })?;
                 (Some(q_tag_bytes), OFFSET_TPID + 4)
@@ -133,11 +137,15 @@ impl EthernetFrame {
             _ => (None, OFFSET_TPID),
         };
 
-        let ether_type: [u8; 2] = data[ether_type_offset..ether_type_offset + 2]
+        let ether_type: [u8; 2] = frame[ether_type_offset..ether_type_offset + 2]
             .try_into()
             .map_err(|e| EthernetFrameError::EtherTypeExtractionError { source: e })?;
 
-        let fcs = data[data.len().saturating_sub(4)..data.len()]
+        if !constants::ACCEPTED_ETHERTYPES.contains(&ether_type) {
+            return Err(EthernetFrameError::InvalidEtherType);
+        }
+
+        let fcs = frame[frame.len().saturating_sub(4)..frame.len()]
             .try_into()
             .map_err(|e| EthernetFrameError::FCSExtractionError { source: e })?;
 
@@ -147,19 +155,7 @@ impl EthernetFrame {
             q_tag,
             ether_type,
             fcs,
-            payload: data[ether_type_offset + 2..(data.len() - 4)].to_vec(),
+            payload: frame[ether_type_offset + 2..(frame.len() - 4)].to_vec(),
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::mocks;
-
-    #[test]
-    fn create_ethernet_frame_from_packet() {
-        let frame = EthernetFrame::new(mocks::MOCK_PACKET.to_vec());
-        println!("frame:: {:?}", frame);
     }
 }

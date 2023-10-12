@@ -25,4 +25,10 @@ pub enum EthernetFrameError {
         #[source]
         source: std::array::TryFromSliceError,
     },
+
+    #[error("Invalid EtherType")]
+    InvalidEtherType,
+
+    #[error("Invalid ethernet frame. Frame has `{0}` bytes")]
+    InvalidEthernetFrame(usize),
 }
