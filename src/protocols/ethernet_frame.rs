@@ -15,11 +15,13 @@
 // | FCS (4 bytes)             |
 // +---------------------------+
 
+use super::errors::EthernetFrameError;
+
 const MAC_ADDRESS_BYTES: usize = 6;
 
 /// Represents a MAC address.
 #[derive(Debug)]
-struct MacAddress([u8; MAC_ADDRESS_BYTES]);
+pub struct MacAddress([u8; MAC_ADDRESS_BYTES]);
 
 impl MacAddress {
     /// Constructs a `MacAddress` from a 6-byte array.
@@ -46,71 +48,107 @@ impl MacAddress {
             self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5]
         )
     }
-
-    /// Converts a vector of bytes into a MAC address array.
-    ///
-    /// This function expects the input vector to have exactly `MAC_ADDRESS_BYTES` length
-    /// and will panic if the size is not correct.
-    ///
-    /// # Arguments
-    ///
-    /// * `bytes` - A vector containing bytes of a MAC address.
-    ///
-    /// # Returns
-    ///
-    /// * A byte array of size `MAC_ADDRESS_BYTES` representing a MAC address.
-    ///
-    /// # Panics
-    ///
-    /// * If the length of the input vector is not equal to `MAC_ADDRESS_BYTES`.
-    pub fn to_mac_array(bytes: Vec<u8>) -> [u8; 6] {
-        if bytes.len() != MAC_ADDRESS_BYTES {
-            panic!("Invalid MAC address size");
-        }
-
-        bytes.try_into().expect("Failed to convert vec to array")
-    }
 }
 
+/// Tag Protocol Identifier for VLAN-tagged frames.
+const TPID_VLAN: [u8; 2] = [0x81, 0x00];
+
+/// Offset for the destination MAC address in an Ethernet frame.
+const OFFSET_MAC_DEST: usize = 0;
+
+/// Offset for the source MAC address in an Ethernet frame.
+const OFFSET_MAC_SRC: usize = 6;
+
+/// Offset for the TPID in an Ethernet frame, potentially indicating a VLAN tag.
+const OFFSET_TPID: usize = 12;
+
+/// Represents the structure of an Ethernet frame.
 #[derive(Debug)]
 pub struct EthernetFrame {
-    mac_destination: MacAddress,
-    mac_source: MacAddress,
-    // ether_type: [u8; 2],
+    /// Destination MAC address of the frame.
+    pub mac_destination: MacAddress,
+
+    /// Source MAC address of the frame.
+    pub mac_source: MacAddress,
+
+    /// Optional Q-tag, present in VLAN-tagged frames. Includes TPID and TCI.
+    pub q_tag: Option<[u8; 4]>,
+
+    /// EtherType field indicating the upper-layer protocol.
+    pub ether_type: [u8; 2],
+
+    pub payload: Vec<u8>,
+
+    pub fcs: [u8; 4],
 }
 
 impl EthernetFrame {
-    pub fn new(data: Vec<u8>) -> Self {
-        EthernetFrame {
-            mac_destination: MacAddress::from_bytes(MacAddress::to_mac_array(
-                EthernetFrame::extract_subslice_as_vec(&data, 0, 6),
-            )),
-            mac_source: MacAddress::from_bytes(MacAddress::to_mac_array(
-                EthernetFrame::extract_subslice_as_vec(&data, 6, 6),
-            )),
-        }
-    }
-
-    /// Extracts a sub-slice from a given vector and returns it as a new vector.
+    /// Constructs an `EthernetFrame` from the given raw byte data.
+    ///
+    /// This function parses the raw byte data representing an Ethernet frame,
+    /// extracts relevant parts (such as MAC addresses, potential Q-tag, and EtherType),
+    /// and returns an `EthernetFrame` instance.
+    ///
+    /// The function expects the raw data to be structured according to standard Ethernet
+    /// frame formats and checks for the presence of an IEEE 802.1Q VLAN tag (Q-tag).
+    /// If such a tag is detected, it adjusts the extraction offsets accordingly.
     ///
     /// # Arguments
     ///
-    /// * `vec` - The source vector.
-    /// * `start` - The starting index of the slice.
-    /// * `len` - The length of the slice.
-    ///
-    /// # Returns
-    ///
-    /// * A new vector containing the sub-slice.
+    /// * `data` - A `Vec<u8>` containing the raw byte data of the Ethernet
+    /// frame. The vector
+    ///   should at least contain bytes representing destination MAC, source
+    /// MAC, and EtherType.
+    ///   If a Q-tag is present, the vector's length should account for it as
+    /// well.
     ///
     /// # Panics
     ///
-    /// * If the specified slice range is out of bounds for the given vector.
-
-    pub fn extract_subslice_as_vec(vec: &Vec<u8>, start: usize, len: usize) -> Vec<u8> {
-        (vec[start..(start + len)])
+    /// The function will panic in the following scenarios:
+    ///
+    /// * If the provided data does not have the expected minimum length.
+    /// * If the data structure doesn't match expected positions for MAC
+    /// addresses or EtherType.
+    ///
+    /// # Returns
+    ///
+    /// Returns an `EthernetFrame` instance populated with the extracted data.
+    pub fn new(data: Vec<u8>) -> Result<Self, EthernetFrameError> {
+        // Directly extract potential MAC addresses and EtherType
+        let mac_destination_bytes: [u8; 6] = data[OFFSET_MAC_DEST..OFFSET_MAC_DEST + 6]
             .try_into()
-            .expect("Failed to convert slice to array")
+            .map_err(|e| EthernetFrameError::MacAddressExtractionError { source: e })?;
+
+        let mac_source_bytes: [u8; 6] = data[OFFSET_MAC_SRC..OFFSET_MAC_SRC + 6]
+            .try_into()
+            .map_err(|e| EthernetFrameError::MacAddressExtractionError { source: e })?;
+
+        let (q_tag, ether_type_offset) = match &data[OFFSET_TPID..OFFSET_TPID + 2] {
+            [81, 00] => {
+                let q_tag_bytes: [u8; 4] = data[OFFSET_TPID..OFFSET_TPID + 4]
+                    .try_into()
+                    .map_err(|e| EthernetFrameError::QTagExtractionError { source: e })?;
+                (Some(q_tag_bytes), OFFSET_TPID + 4)
+            }
+            _ => (None, OFFSET_TPID),
+        };
+
+        let ether_type: [u8; 2] = data[ether_type_offset..ether_type_offset + 2]
+            .try_into()
+            .map_err(|e| EthernetFrameError::EtherTypeExtractionError { source: e })?;
+
+        let fcs = data[data.len().saturating_sub(4)..data.len()]
+            .try_into()
+            .map_err(|e| EthernetFrameError::FCSExtractionError { source: e })?;
+
+        Ok(EthernetFrame {
+            mac_destination: MacAddress::from_bytes(mac_destination_bytes),
+            mac_source: MacAddress::from_bytes(mac_source_bytes),
+            q_tag,
+            ether_type,
+            fcs,
+            payload: data[ether_type_offset + 2..(data.len() - 4)].to_vec(),
+        })
     }
 }
 
@@ -122,5 +160,6 @@ mod tests {
     #[test]
     fn create_ethernet_frame_from_packet() {
         let frame = EthernetFrame::new(mocks::MOCK_PACKET.to_vec());
+        println!("frame:: {:?}", frame);
     }
 }
