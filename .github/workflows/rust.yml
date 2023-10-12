@@ -18,9 +18,6 @@ jobs:
     - name: Checkout code
     - uses: actions/checkout@v3
     
-    - name: Lint
-      uses: github/super-linter@3
-      
     - name: Build
       run: cargo build --verbose
    
