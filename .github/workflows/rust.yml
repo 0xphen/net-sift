@@ -22,7 +22,7 @@ jobs:
       run: cargo build --verbose
 
     - name: Lint
-      uses: github/super-linter@3
+      uses: super-linter/super-linter@v5
    
     - name: Run tests
       run: cargo test --verbose
