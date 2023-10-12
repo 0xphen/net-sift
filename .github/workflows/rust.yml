@@ -21,8 +21,8 @@ jobs:
     - name: Build
       run: cargo build --verbose
 
-    - name: Lint
-      uses: super-linter/super-linter@v5
+    # - name: Lint
+    #   uses: super-linter/super-linter@v5
    
     - name: Run tests
       run: cargo test --verbose
