@@ -35,3 +35,19 @@ pub enum EthernetFrameError {
     #[error("Invalid ethernet frame. Frame has `{0}` bytes")]
     InvalidEthernetFrame(usize),
 }
+
+#[derive(Error, Debug)]
+pub enum ParserError {
+    #[error("Extraction of `{string}` failed")]
+    ExtractionError {
+        string: String,
+        #[source]
+        source: std::array::TryFromSliceError,
+    },
+
+    #[error("Packet too short got `{0}`, expected `{1}` `{2}`")]
+    PacketTooShort(usize, usize, String),
+
+    #[error("Invalid IHL value got `{0}`, expected >=`{1}` or <= `{2}`")]
+    InvalidIHLValue(u32, u8, u8),
+}
