@@ -14,104 +14,69 @@
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 // |                    Options                    |    Padding    |
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
 use super::errors::ParserError;
 
-use std::array::TryFromSliceError;
-use std::convert::TryFrom;
+use std::io::{Cursor, Read, Seek, SeekFrom};
 
-const BYTE: u8 = 8;
-
-const VERSION_OFFSET: usize = 0;
-const VERSION_LENGTH: usize = 1;
-
-const IHL_OFFSET: usize = 1;
-const IHL_LENGTH: usize = 1;
 const MIN_IHL_VALUE: u8 = 5;
 const MAX_IHL_VALUE: u8 = 15;
 
-const DSCP_OFFSET: usize = 2;
-const DSCP_LENGTH: usize = 1;
-
-const ECN_OFFSET: usize = 3;
-const ECN_LENGTH: usize = 1;
-
-const TOTAL_LENGTH_OFFSET: usize = 4;
-const TOTAL_LENGTH_LENGTH: usize = 2;
-
-const IDENTIFICATION_OFFSET: usize = 6;
-const IDENTIFICATION_LENGTH: usize = 2;
-
-const FLAGS_OFFSET: usize = 8;
-const FLAGS_LENGTH: usize = 1;
-
-const FRAGMENT_OFFSET: usize = 9;
-const FRAGMENT_LENGTH: usize = 2;
-
-const TTL_OFFSET: usize = 11;
-const TTL_LENGTH: usize = 1;
-
-const PROTOCOL_OFFSET: usize = 12;
-const PROTOCOL_LENGTH: usize = 1;
-
-const HEADER_CHECKSUM_OFFSET: usize = 13;
-const HEADER_CHECKSUM_LENGTH: usize = 2;
-
-const SRC_ADDRESS_OFFSET: usize = 14;
-const SRC_ADDRESS_LENGTH: usize = 4;
-
 const DEST_ADDRESS_OFFSET: usize = 18;
 const DEST_ADDRESS_LENGTH: usize = 4;
+
+const MIN_PACKET_SIZE: usize = 20;
 
 #[derive(Debug)]
 pub struct IPV4 {
     /// A single-byte field indicating the version of the IP protocol.
     /// For IPv4, this is typically set to 4.
-    pub version: [u8; 1],
+    pub version: u8,
 
     /// A single-byte field indicating the header length in 32-bit words.
     /// This field determines the start of the optional "options" field and the data/payload.
-    pub internet_header_length: [u8; 1],
+    pub internet_header_length: u8,
 
     /// A single-byte field representing the Differentiated Services Code Point,
     /// which is used for quality of service (QoS) configuration.
-    pub dscp: [u8; 1],
+    pub dscp: u8,
 
     /// A single-byte field for the Explicit Congestion Notification,
     /// indicating the network congestion status.
-    pub ecn: [u8; 1],
+    pub ecn: u8,
 
     /// A two-byte field representing the total length of the IP packet,
     /// including the header and data.
-    pub total_length: [u8; 2],
+    pub total_length: u16,
 
     /// A two-byte field for the identification value, used for
     /// uniquely identifying fragments of an original IP datagram.
-    pub identification: [u8; 2],
+    pub identification: u16,
 
     /// A single-byte field containing flags related to IP fragmentation,
     /// such as "Don't Fragment" and "More Fragments".
-    pub flags: [u8; 1],
+    pub flags: u8,
 
     /// A two-byte field indicating where in the original IP datagram
     /// this fragment belongs.
-    pub fragment_offset: [u8; 2],
+    pub fragment_offset: u16,
 
     /// A single-byte field denoting the maximum number of hops
     /// (routers) the packet can traverse before being discarded.
-    pub time_to_live: [u8; 1],
+    pub time_to_live: u8,
 
     /// A single-byte field indicating the transport layer protocol
     /// used by the packet's data (e.g., TCP, UDP).
-    pub protocol: [u8; 1],
+    pub protocol: u8,
 
     /// A two-byte field for error-checking the header's integrity.
-    pub header_checksum: [u8; 2],
+    pub header_checksum: u16,
 
     /// A four-byte field representing the source IP address.
-    pub source_address: [u8; 4],
+    pub source_address: u32,
 
     /// A four-byte field representing the destination IP address.
-    pub destination_address: [u8; 4],
+    pub destination_address: u32,
 
     /// An optional field containing any additional IP header options,
     /// represented as a vector of bytes. This field is variable in length
@@ -123,100 +88,72 @@ pub struct IPV4 {
 }
 
 impl IPV4 {
-    pub fn new(packets: Vec<u8>) -> Result<Self, ParserError> {
-        let version: [u8; 1] =
-            Self::extract_typed_field(&packets, VERSION_OFFSET, VERSION_LENGTH, "Version")?;
+    /// Constructs a new instance of `IPV4` by parsing raw packet data.
+    ///
+    /// This function expects `packets` to contain the raw bytes of an IPv4 packet and
+    /// tries to extract various fields from these bytes.
+    ///
+    /// # Arguments
+    /// - `packets`: A byte slice representing the raw data of an IPv4 packet.
+    ///
+    /// # Returns
+    /// - `Result<IPV4, ParserError>`: An `IPV4` instance if the parsing was successful,
+    /// or an error indicating the reason for failure.
+    fn new(packets: &[u8]) -> Result<Self, ParserError> {
+        // Ensure packet is of minimum expected length.
+        if packets.len() < MIN_PACKET_SIZE {
+            return Err(ParserError::PacketTooShort(packets.len(), MIN_PACKET_SIZE));
+        }
+        let mut cursor = Cursor::new(packets);
 
-        let internet_header_length: [u8; 1] =
-            Self::extract_typed_field(&packets, IHL_OFFSET, IHL_LENGTH, "Internet Header Length")?;
+        let version = Self::read_u8(&mut cursor, "Version")?;
+        let internet_header_length = Self::read_u8(&mut cursor, "IHL")?;
 
-        let ihl_value = internet_header_length[0];
-
-        if ihl_value < 5 || ihl_value > 15 {
+        // Ensure the IHL is between 5 and 15.
+        if internet_header_length < 5 || internet_header_length > 15 {
             return Err(ParserError::InvalidIHLValue(
-                ihl_value as u32,
+                internet_header_length as u32,
                 MIN_IHL_VALUE,
                 MAX_IHL_VALUE,
             ));
         }
 
-        let dscp: [u8; 1] = Self::extract_typed_field(&packets, DSCP_OFFSET, DSCP_LENGTH, "DSCP")?;
+        let dscp = Self::read_u8(&mut cursor, "DSCP")?;
+        let ecn = Self::read_u8(&mut cursor, "ECN")?;
+        let total_length = Self::read_u16(&mut cursor, "Total Length")?;
+        let identification = Self::read_u16(&mut cursor, "Identification")?;
+        let flags = Self::read_u8(&mut cursor, "Flags")?;
+        let fragment_offset = Self::read_u16(&mut cursor, "Fragment Offset")?;
+        let time_to_live = Self::read_u8(&mut cursor, "TTL")?;
+        let protocol = Self::read_u8(&mut cursor, "Protocol")?;
+        let header_checksum = Self::read_u16(&mut cursor, "Header Checksum")?;
+        let source_address = Self::read_u32(&mut cursor, "Source Address")?;
+        let destination_address = Self::read_u32(&mut cursor, "Destination Address")?;
 
-        let ecn: [u8; 1] = Self::extract_typed_field(&packets, ECN_OFFSET, ECN_LENGTH, "ECN")?;
-
-        let total_length: [u8; 2] = Self::extract_typed_field(
-            &packets,
-            TOTAL_LENGTH_OFFSET,
-            TOTAL_LENGTH_LENGTH,
-            "Total Length",
-        )?;
-
-        let identification: [u8; 2] = Self::extract_typed_field(
-            &packets,
-            IDENTIFICATION_OFFSET,
-            IDENTIFICATION_LENGTH,
-            "Identification",
-        )?;
-
-        let flags: [u8; 1] =
-            Self::extract_typed_field(&packets, FLAGS_OFFSET, FLAGS_LENGTH, "Flags")?;
-
-        let fragment_offset: [u8; 2] = Self::extract_typed_field(
-            &packets,
-            FRAGMENT_OFFSET,
-            FRAGMENT_LENGTH,
-            "Fragments Offset",
-        )?;
-
-        let time_to_live: [u8; 1] =
-            Self::extract_typed_field(&packets, TTL_OFFSET, TTL_LENGTH, "TTL")?;
-
-        let protocol: [u8; 1] =
-            Self::extract_typed_field(&packets, PROTOCOL_OFFSET, PROTOCOL_LENGTH, "Protocol")?;
-
-        let header_checksum: [u8; 2] = Self::extract_typed_field(
-            &packets,
-            HEADER_CHECKSUM_OFFSET,
-            HEADER_CHECKSUM_LENGTH,
-            "Header Checksum",
-        )?;
-
-        let source_address: [u8; 4] = Self::extract_typed_field(
-            &packets,
-            SRC_ADDRESS_OFFSET,
-            SRC_ADDRESS_LENGTH,
-            "Source Address",
-        )?;
-
-        let destination_address: [u8; 4] = Self::extract_typed_field(
-            &packets,
-            DEST_ADDRESS_OFFSET,
-            DEST_ADDRESS_LENGTH,
-            "Destination Address",
-        )?;
-
+        // Calculate offsets and sizes for options and payload data.
         let (options_offset, options_size, payload_offset) =
-            Self::payload_and_options_offsets(ihl_value as usize);
+            Self::payload_and_options_offsets(internet_header_length as usize);
 
-        let payload: Vec<u8> = Self::extract_bytes_as_vector(
-            &packets,
-            payload_offset,
-            ((packets.len() - 1) - (options_offset + options_size)),
-            "Payload",
-        )?;
+        let options: Option<Vec<u8>>;
+        let payload: Vec<u8>;
 
-        let options: Option<Vec<u8>> = match options_offset {
-            0 => None,
-            _ => {
-                let options: Vec<u8> = Self::extract_bytes_as_vector(
-                    &packets,
-                    options_offset,
-                    options_size,
-                    "Options",
-                )?;
-                Some(options)
-            }
-        };
+        if options_offset != 0 {
+            cursor
+                .seek(SeekFrom::Start(options_offset as u64))
+                .map_err(|e| ParserError::CursorError {
+                    string: "Options".to_string(),
+                    source: e,
+                })?;
+
+            options = Some(Self::read_arbitrary_length(
+                &mut cursor,
+                options_size,
+                "Options",
+            )?);
+        }
+
+        let payload_size = ((packets.len() - 1) - (options_offset + options_size));
+        payload = Self::read_arbitrary_length(&mut cursor, payload_size, "Payload")?;
 
         Ok(IPV4 {
             version,
@@ -237,78 +174,93 @@ impl IPV4 {
         })
     }
 
-    /// Extracts a specific field from a given packet based on the provided offset and length.
-    ///
-    /// This function is designed to facilitate the extraction of IPV4 fields from a packet.
-    /// The type of the extracted field is determined by the type parameter `T`, which must implement
-    /// the `TryFrom<&'a [u8], Error = TryFromSliceError>` trait.
-    ///
-    /// # Parameters
-    /// - `packet`: A slice of the packet data.
-    /// - `offset`: The starting position from which the field should be extracted.
-    /// - `length`: The number of bytes to extract for this field.
-    /// - `field`: A string representation (name) of the field being extracted (used for error reporting).
-    ///
-    /// # Returns
-    /// - `Ok(T)`: The extracted field of type `T`.
-    /// - `Err(ParserError::PacketTooShort)`: If the packet is too short to contain the expected field.
-    /// - `Err(ParserError::ExtractionError)`: If there's an error during extraction.
-    fn extract_typed_field<'a, T>(
-        packet: &'a [u8],
-        offset: usize,
-        length: usize,
-        field: &str,
-    ) -> Result<T, ParserError>
-    where
-        T: TryFrom<&'a [u8], Error = TryFromSliceError>,
-    {
-        if packet.len() < offset + length {
-            return Err(ParserError::PacketTooShort(
-                packet.len(),
-                length,
-                field.to_string(),
-            ));
-        }
-
-        T::try_from(&packet[offset..offset + length]).map_err(|e| ParserError::ExtractionError {
-            source: e,
-            string: field.to_string(),
-        })
-    }
-
-    /// Extracts a field from the given packet as a byte vector (`Vec<u8>`).
+    /// Reads a single byte (`u8`) from the cursor's current position.
     ///
     /// # Arguments
-    ///
-    /// * `packet` - A byte slice representing the packet from which the field needs to be extracted.
-    /// * `offset` - The starting position within the packet from which extraction should begin.
-    /// * `length` - The number of bytes to extract from the packet.
-    /// * `field`  - A description or name for the field being extracted. This is used for error messages.
+    /// - `cursor`: The cursor pointing to the data.
+    /// - `field`: The name of the field being read, for error context.
     ///
     /// # Returns
+    /// - `Result<u8, ParserError>`: The read byte or an error.
+    fn read_u8(cursor: &mut Cursor<&[u8]>, field: &str) -> Result<u8, ParserError> {
+        let mut buffer: [u8; 1] = Default::default();
+
+        cursor
+            .read_exact(&mut buffer)
+            .map_err(|e| ParserError::ExtractionError {
+                source: e,
+                string: field.to_string(),
+            })?;
+
+        Ok(buffer[0])
+    }
+
+    /// Reads two bytes and converts them into a `u16` integer.
     ///
-    /// * `Result<Vec<u8>, ParserError>` - A `Result` which, on success, contains the extracted bytes as a `Vec<u8>`.
-    ///   On failure, it contains a `ParserError` indicating the reason for the failure.
+    /// # Arguments
+    /// - `cursor`: The cursor pointing to the data.
+    /// - `field`: The name of the field being read, for error context.
     ///
-    /// # Errors
+    /// # Returns
+    /// - `Result<u16, ParserError>`: The read `u16` integer or an error.
+    fn read_u16(cursor: &mut Cursor<&[u8]>, field: &str) -> Result<u16, ParserError> {
+        let mut buffer: [u8; 2] = Default::default();
+
+        cursor
+            .read_exact(&mut buffer)
+            .map_err(|e| ParserError::ExtractionError {
+                source: e,
+                string: field.to_string(),
+            })?;
+
+        Ok(u16::from_be_bytes(buffer))
+    }
+
+    /// Reads four bytes and converts them into a `u32` integer.
     ///
-    /// This function will return an error if:
-    /// * The given offset and length would result in out-of-bounds access on the packet.
-    fn extract_bytes_as_vector(
-        packet: &[u8],
-        offset: usize,
+    /// # Arguments
+    /// - `cursor`: The cursor pointing to the data.
+    /// - `field`: The name of the field being read, for error context.
+    ///
+    /// # Returns
+    /// - `Result<u32, ParserError>`: The read `u32` integer or an error.
+    fn read_u32(cursor: &mut Cursor<&[u8]>, field: &str) -> Result<u32, ParserError> {
+        let mut buffer: [u8; 4] = Default::default();
+
+        cursor
+            .read_exact(&mut buffer)
+            .map_err(|e| ParserError::ExtractionError {
+                source: e,
+                string: field.to_string(),
+            })?;
+
+        Ok(u32::from_be_bytes(buffer))
+    }
+
+    /// Reads a specified number of bytes from the cursor's current position.
+    ///
+    /// # Arguments
+    /// - `cursor`: The cursor pointing to the data.
+    /// - `length`: The number of bytes to read.
+    /// - `field`: The name of the field being read, for error context.
+    ///
+    /// # Returns
+    /// - `Result<Vec<u8>, ParserError>`: The read bytes as a `Vec<u8>` or an error.
+    fn read_arbitrary_length(
+        cursor: &mut Cursor<&[u8]>,
         length: usize,
         field: &str,
     ) -> Result<Vec<u8>, ParserError> {
-        if packet.len() < offset + length {
-            return Err(ParserError::PacketTooShort(
-                packet.len(),
-                length,
-                field.to_string(),
-            ));
-        }
+        let mut buffer = vec![0; length];
 
-        Ok(packet[offset..offset + length].to_vec())
+        cursor
+            .read_exact(&mut buffer)
+            .map_err(|e| ParserError::ExtractionError {
+                source: e,
+                string: field.to_string(),
+            })?;
+
+        Ok(buffer)
     }
 
     /// Calculates the offsets and size for the options and payload fields in an IPv4 packet based on the provided Internet Header Length (IHL).
@@ -352,3 +304,27 @@ impl IPV4 {
         (0, 0, DEST_ADDRESS_OFFSET + DEST_ADDRESS_LENGTH)
     }
 }
+
+
+// fn extract_typed_field<'a, T>(
+//   packet: &'a [u8],
+//   offset: usize,
+//   length: usize,
+//   field: &str,
+// ) -> Result<T, ParserError>
+// where
+//   T: TryFrom<&'a [u8], Error = TryFromSliceError>,
+// {
+//   if packet.len() < offset + length {
+//       return Err(ParserError::PacketTooShort(
+//           packet.len(),
+//           length,
+//           field.to_string(),
+//       ));
+//   }
+
+//   T::try_from(&packet[offset..offset + length]).map_err(|e| ParserError::ExtractionError {
+//       source: e,
+//       string: field.to_string(),
+//   })
+// }
