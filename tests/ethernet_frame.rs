@@ -35,17 +35,6 @@ fn generate_mock_frame(
     frame
 }
 
-// TODO: Fix macro
-// macro_rules! validate_frame {
-//     ($data:expr, $expected:expr, $ident:expr) => {
-//         #[test]
-//         fn $ident() {
-//             let ethernet_frame = EthernetFrame::new($data.to_vec()).unwrap();
-//             validate_ethernet_frame(ethernet_frame, &$expected);
-//         }
-//     };
-// }
-
 fn validate_ethernet_frame(frame: EthernetFrame, expected_values: &EthernetFrameValues) {
     assert_eq!(
         frame.mac_destination.to_string(),

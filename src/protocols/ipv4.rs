@@ -18,6 +18,7 @@
 use super::errors::ParserError;
 
 use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::net::Ipv4Addr;
 
 const MIN_IHL_VALUE: u8 = 5;
 const MAX_IHL_VALUE: u8 = 15;
@@ -27,23 +28,36 @@ const DEST_ADDRESS_LENGTH: usize = 4;
 
 const MIN_PACKET_SIZE: usize = 20;
 
+#[derive(Debug, PartialEq)]
+pub enum IPType {
+    TCP,
+    UDP,
+    ICMP,
+    Other(u8),
+}
+
+impl From<u8> for IPType {
+    fn from(byte: u8) -> IPType {
+        match byte {
+            1 => IPType::ICMP,
+            6 => IPType::TCP,
+            17 => IPType::UDP,
+            _ => IPType::Other(byte),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct IPV4 {
     /// A single-byte field indicating the version of the IP protocol.
     /// For IPv4, this is typically set to 4.
     pub version: u8,
 
+    pub type_of_service: u8,
+
     /// A single-byte field indicating the header length in 32-bit words.
     /// This field determines the start of the optional "options" field and the data/payload.
     pub internet_header_length: u8,
-
-    /// A single-byte field representing the Differentiated Services Code Point,
-    /// which is used for quality of service (QoS) configuration.
-    pub dscp: u8,
-
-    /// A single-byte field for the Explicit Congestion Notification,
-    /// indicating the network congestion status.
-    pub ecn: u8,
 
     /// A two-byte field representing the total length of the IP packet,
     /// including the header and data.
@@ -67,16 +81,16 @@ pub struct IPV4 {
 
     /// A single-byte field indicating the transport layer protocol
     /// used by the packet's data (e.g., TCP, UDP).
-    pub protocol: u8,
+    pub protocol: IPType,
 
     /// A two-byte field for error-checking the header's integrity.
     pub header_checksum: u16,
 
     /// A four-byte field representing the source IP address.
-    pub source_address: u32,
+    pub source_address: Ipv4Addr,
 
     /// A four-byte field representing the destination IP address.
-    pub destination_address: u32,
+    pub destination_address: Ipv4Addr,
 
     /// An optional field containing any additional IP header options,
     /// represented as a vector of bytes. This field is variable in length
@@ -99,15 +113,19 @@ impl IPV4 {
     /// # Returns
     /// - `Result<IPV4, ParserError>`: An `IPV4` instance if the parsing was successful,
     /// or an error indicating the reason for failure.
-    fn new(packets: &[u8]) -> Result<Self, ParserError> {
+    pub fn new(packets: &[u8]) -> Result<Self, ParserError> {
         // Ensure packet is of minimum expected length.
         if packets.len() < MIN_PACKET_SIZE {
             return Err(ParserError::PacketTooShort(packets.len(), MIN_PACKET_SIZE));
         }
         let mut cursor = Cursor::new(packets);
 
-        let version = Self::read_u8(&mut cursor, "Version")?;
-        let internet_header_length = Self::read_u8(&mut cursor, "IHL")?;
+        let version_ihl = Self::read_u8(&mut cursor, "Version & IHL")?;
+
+        // Right shift the byte `version_ihl` 4 times to get the version
+        // which is in the MSB.
+        let version = version_ihl >> 4;
+        let internet_header_length = version_ihl & 15;
 
         // Ensure the IHL is between 5 and 15.
         if internet_header_length < 5 || internet_header_length > 15 {
@@ -118,23 +136,33 @@ impl IPV4 {
             ));
         }
 
-        let dscp = Self::read_u8(&mut cursor, "DSCP")?;
-        let ecn = Self::read_u8(&mut cursor, "ECN")?;
+        let type_of_service = Self::read_u8(&mut cursor, "ToS")?;
         let total_length = Self::read_u16(&mut cursor, "Total Length")?;
+
         let identification = Self::read_u16(&mut cursor, "Identification")?;
-        let flags = Self::read_u8(&mut cursor, "Flags")?;
-        let fragment_offset = Self::read_u16(&mut cursor, "Fragment Offset")?;
+
+        let flags_fragment = Self::read_u16(&mut cursor, "Flags & Fragment")?;
+
+        // Right shift the byte `flags_fragment` 13 times to get the flags
+        // which is in the MSB.
+        let flags = (flags_fragment >> 13) as u8;
+        let fragment_offset = flags_fragment & 8191;
+
         let time_to_live = Self::read_u8(&mut cursor, "TTL")?;
-        let protocol = Self::read_u8(&mut cursor, "Protocol")?;
+        let protocol = IPType::from(Self::read_u8(&mut cursor, "Protocol")?);
         let header_checksum = Self::read_u16(&mut cursor, "Header Checksum")?;
-        let source_address = Self::read_u32(&mut cursor, "Source Address")?;
-        let destination_address = Self::read_u32(&mut cursor, "Destination Address")?;
+
+        let [a, b, c, d] = u32::to_be_bytes(Self::read_u32(&mut cursor, "Source Address")?);
+        let source_address = Ipv4Addr::new(a, b, c, d);
+
+        let [a, b, c, d] = u32::to_be_bytes(Self::read_u32(&mut cursor, "Source Address")?);
+        let destination_address = Ipv4Addr::new(a, b, c, d);
 
         // Calculate offsets and sizes for options and payload data.
-        let (options_offset, options_size, payload_offset) =
+        let (options_offset, options_size, _payload_offset) =
             Self::payload_and_options_offsets(internet_header_length as usize);
 
-        let options: Option<Vec<u8>>;
+        let mut options: Option<Vec<u8>> = Default::default();
         let payload: Vec<u8>;
 
         if options_offset != 0 {
@@ -152,14 +180,14 @@ impl IPV4 {
             )?);
         }
 
-        let payload_size = ((packets.len() - 1) - (options_offset + options_size));
-        payload = Self::read_arbitrary_length(&mut cursor, payload_size, "Payload")?;
+        let payload_size = packets.len() - (internet_header_length as usize * 4);
+
+        payload = Self::read_arbitrary_length(&mut cursor, payload_size as usize, "Payload")?;
 
         Ok(IPV4 {
             version,
             internet_header_length,
-            dscp,
-            ecn,
+            type_of_service,
             total_length,
             identification,
             flags,
@@ -192,7 +220,7 @@ impl IPV4 {
                 string: field.to_string(),
             })?;
 
-        Ok(buffer[0])
+        Ok(u8::from_be_bytes(buffer))
     }
 
     /// Reads two bytes and converts them into a `u16` integer.
@@ -262,69 +290,42 @@ impl IPV4 {
 
         Ok(buffer)
     }
-
-    /// Calculates the offsets and size for the options and payload fields in an IPv4 packet based on the provided Internet Header Length (IHL).
+    /// Calculate offsets and sizes for the optional "options" field and the "payload" data
+    /// based on the Internet Header Length (IHL) field in the IPv4 header.
     ///
-    /// The IPv4 header has a variable length due to the optional "options" field. This function helps in determining the start and end points
-    /// of both the options and payload sections of the packet based on the provided IHL value.
+    /// The IHL field indicates the length of the header in 32-bit words. To determine the
+    /// location and size of the "options" field and the "payload" data, we perform the
+    /// following calculations:
+    ///
+    /// - If the IHL is greater than the minimum expected value of 5 (indicating the presence
+    ///   of additional options), we calculate the size of the "options" field as follows:
+    ///   - Multiply the IHL value by 4 (each IHL unit represents 32 bits or 4 bytes).
+    ///   - Subtract the size of the base header (20 bytes) to get the options size.
+    ///   - Set the options offset to the end of the base header (destination address + 4 bytes).
+    ///   - Calculate the payload offset as the options offset plus the options size.
+    ///
+    /// - If the IHL is 5 (indicating no additional options), there are no "options" in the header.
+    ///   - Set both the options offset and options size to 0.
+    ///   - Calculate the payload offset as the end of the base header (destination address + 4 bytes).
     ///
     /// # Arguments
-    ///
-    /// * `ihl` - The Internet Header Length field value from the IPv4 header. This represents the length of the header in 32-bit words.
+    /// - `ihl`: The Internet Header Length (IHL) field from the IPv4 header.
     ///
     /// # Returns
-    ///
-    /// * A tuple consisting of three `usize` values:
-    ///   - `options_offset`: The starting offset (position) of the options field within the packet.
-    ///   - `options_size`: The size (in bytes) of the options field.
-    ///   - `payload_offset`: The starting offset (position) of the payload/data section of the packet.
-    ///
-    /// # Notes
-    ///
-    /// If the IHL value is 5 or less (meaning there are no options in the header), the function will return `(0, 0, DEST_ADDRESS_OFFSET + DEST_ADDRESS_LENGTH)`.
-    /// This indicates that there is no options section and the payload starts immediately after the fixed header section.
-    ///
-    /// The calculation for the options' size is based on the understanding that each IHL unit corresponds to 4 bytes and the base header size without options is 20 bytes.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// let ihl_value = 6; // Example IHL value indicating presence of options.
-    /// let (options_start, options_size, payload_start) = payload_and_options_offsets(ihl_value);
-    /// ```
-    ///
+    /// - A tuple containing:
+    ///   1. Options offset: The offset where the "options" field starts in the header.
+    ///   2. Options size: The size (in bytes) of the "options" field.
+    ///   3. Payload offset: The offset where the "payload" data starts in the header.
     fn payload_and_options_offsets(ihl: usize) -> (usize, usize, usize) {
-        if ihl > 5 {
-            let options_size = (ihl * 4) - 20; // 4 bytes per IHL unit minus base header size
+        if ihl > MIN_IHL_VALUE as usize {
+            let options_size = (ihl * 4) - MIN_PACKET_SIZE; // 4 bytes per IHL unit minus base header size
             let options_offset = DEST_ADDRESS_OFFSET + DEST_ADDRESS_LENGTH;
             let payload_offset = options_offset + options_size;
             return (options_offset, options_size, payload_offset);
         }
 
+        // If IHL is 5 (no options), there are no "options" in the header
+        // Set both options offset and options size to 0
         (0, 0, DEST_ADDRESS_OFFSET + DEST_ADDRESS_LENGTH)
     }
 }
-
-
-// fn extract_typed_field<'a, T>(
-//   packet: &'a [u8],
-//   offset: usize,
-//   length: usize,
-//   field: &str,
-// ) -> Result<T, ParserError>
-// where
-//   T: TryFrom<&'a [u8], Error = TryFromSliceError>,
-// {
-//   if packet.len() < offset + length {
-//       return Err(ParserError::PacketTooShort(
-//           packet.len(),
-//           length,
-//           field.to_string(),
-//       ));
-//   }
-
-//   T::try_from(&packet[offset..offset + length]).map_err(|e| ParserError::ExtractionError {
-//       source: e,
-//       string: field.to_string(),
-//   })
-// }
