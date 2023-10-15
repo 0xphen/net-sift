@@ -2,7 +2,8 @@ use net_sift::protocols::ipv4::IPV4;
 
 const DEFAULT_VERSION_IHL: [u8; 1] = [133];
 const DEFAULT_TOS: [u8; 1] = [15];
-const DEFAULT_TOTAL_LENGTH_WITHOUT_OPTIONS: [u8; 2] = [0, 30];
+const DEFAULT_TOTAL_LENGTH_WITHOUT_OPTIONS: [u8; 2] = [0, 25];
+const DEFAULT_TOTAL_LENGTH_WITH_OPTIONS: [u8; 2] = [0, 30];
 const DEFAULT_IDENTIFICATION: [u8; 2] = [8, 30];
 const DEFAULT_FLAGS_FRAGMENT: [u8; 2] = [15, 80];
 const DEFAULT_TTL: [u8; 1] = [60];

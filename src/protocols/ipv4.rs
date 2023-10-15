@@ -180,7 +180,7 @@ impl IPV4 {
             )?);
         }
 
-        let payload_size = packets.len() - (internet_header_length as usize * 4);
+        let payload_size = total_length - (internet_header_length as u16 * 4);
 
         payload = Self::read_arbitrary_length(&mut cursor, payload_size as usize, "Payload")?;
 
