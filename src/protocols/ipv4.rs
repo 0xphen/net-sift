@@ -23,7 +23,7 @@ use std::net::Ipv4Addr;
 const MIN_IHL_VALUE: u8 = 5;
 const MAX_IHL_VALUE: u8 = 15;
 
-const DEST_ADDRESS_OFFSET: usize = 18;
+const DEST_ADDRESS_OFFSET: usize = 16;
 const DEST_ADDRESS_LENGTH: usize = 4;
 
 const MIN_PACKET_SIZE: usize = 20;

@@ -1,18 +1,42 @@
-use net_sift::protocols::ipv4::IPV4;
+use net_sift::protocols::{errors::ParserError, ipv4::IPType, ipv4::IPV4};
 
-const DEFAULT_VERSION_IHL: [u8; 1] = [133];
+use std::net::Ipv4Addr;
+
+const MOCK_MALFORMED_PACKET: [u8; 19] = [
+    12, 25, 60, 255, 88, 12, 108, 100, 19, 25, 200, 199, 81, 0, 2, 22, 8, 0, 12,
+];
+
+const DEFAULT_VERSION_IHL_WITHOUT_OPTIONS: [u8; 1] = [133];
+const DEFAULT_VERSION_IHL_WITH_OPTIONS: [u8; 1] = [134];
 const DEFAULT_TOS: [u8; 1] = [15];
 const DEFAULT_TOTAL_LENGTH_WITHOUT_OPTIONS: [u8; 2] = [0, 25];
-const DEFAULT_TOTAL_LENGTH_WITH_OPTIONS: [u8; 2] = [0, 30];
+const DEFAULT_TOTAL_LENGTH_WITH_OPTIONS: [u8; 2] = [0, 29];
 const DEFAULT_IDENTIFICATION: [u8; 2] = [8, 30];
-const DEFAULT_FLAGS_FRAGMENT: [u8; 2] = [15, 80];
+const DEFAULT_FLAGS_FRAGMENT: [u8; 2] = [182, 208];
 const DEFAULT_TTL: [u8; 1] = [60];
 const DEFAULT_PROTOCOL: [u8; 1] = [6];
 const DEFAULT_HEADER_CHECKSUM: [u8; 2] = [100, 12];
 const DEFAULT_SRC_ADDR: [u8; 4] = [100, 127, 60, 5];
 const DEFAULT_DEST_ADDR: [u8; 4] = [30, 44, 8, 50];
-const DEFAULT_OPTIONS: [u8; 10] = [30, 44, 0, 50, 12, 45, 159, 45, 21, 100];
+const DEFAULT_OPTIONS: [u8; 4] = [30, 44, 50, 12];
 const DEFAULT_PAYLOAD: [u8; 5] = [50, 12, 45, 19, 23];
+
+struct IPV4Values {
+    expected_version: u8,
+    expected_type_of_service: u8,
+    expected_ihl: u8,
+    expected_total_length: u16,
+    expected_id: u16,
+    expected_flags: u8,
+    expected_fragment_offset: u16,
+    expected_ttl: u8,
+    expected_protocol: IPType,
+    expected_header_checksum: u16,
+    expected_source_address: std::net::Ipv4Addr,
+    expected_destination_address: std::net::Ipv4Addr,
+    expected_options: Option<Vec<u8>>,
+    expected_payload: &'static [u8],
+}
 
 fn generate_mock_packet(
     version_ihl: [u8; 1],
@@ -25,7 +49,7 @@ fn generate_mock_packet(
     header_checksum: [u8; 2],
     source_address: [u8; 4],
     destination_address: [u8; 4],
-    options: Option<Vec<u8>>,
+    options: Option<&[u8]>,
     payload: &[u8],
 ) -> Vec<u8> {
     let packet_size = match options {
@@ -58,27 +82,29 @@ fn generate_mock_packet(
     packets
 }
 
-fn validate_ipv4(packet: IPV4, expected_packet: IPV4) {
-    assert!(packet.version == expected_packet.version);
-    assert!(packet.internet_header_length == expected_packet.internet_header_length);
-    assert!(packet.type_of_service == expected_packet.type_of_service);
-    assert!(packet.total_length == expected_packet.total_length);
-    assert!(packet.identification == expected_packet.identification);
-    assert!(packet.flags == expected_packet.flags);
-    assert!(packet.fragment_offset == expected_packet.fragment_offset);
-    assert!(packet.time_to_live == expected_packet.time_to_live);
-    assert!(packet.protocol == expected_packet.protocol);
-    assert!(packet.header_checksum == expected_packet.header_checksum);
-    assert!(packet.source_address == expected_packet.source_address);
-    assert!(packet.destination_address == expected_packet.destination_address);
-    assert!(packet.options == expected_packet.options);
-    assert!(packet.payload == expected_packet.payload);
+fn validate_ipv4(packet: IPV4, expected_packet: IPV4Values) {
+    assert!(packet.version == expected_packet.expected_version);
+    assert!(packet.internet_header_length == expected_packet.expected_ihl);
+    assert!(packet.type_of_service == expected_packet.expected_type_of_service);
+    assert!(packet.total_length == expected_packet.expected_total_length);
+    assert!(packet.identification == expected_packet.expected_id);
+    assert!(packet.flags == expected_packet.expected_flags);
+    assert!(packet.fragment_offset == expected_packet.expected_fragment_offset);
+    assert!(packet.time_to_live == expected_packet.expected_ttl);
+    assert!(packet.protocol == expected_packet.expected_protocol);
+    assert!(packet.header_checksum == expected_packet.expected_header_checksum);
+    assert!(packet.source_address == expected_packet.expected_source_address);
+    assert!(packet.destination_address == expected_packet.expected_destination_address);
+    assert!(packet.options == expected_packet.expected_options);
+    assert!(packet.payload == expected_packet.expected_payload);
 }
+
+// TESTS
 
 #[test]
 fn can_create_ipv4_without_options() {
     let packets = generate_mock_packet(
-        DEFAULT_VERSION_IHL,
+        DEFAULT_VERSION_IHL_WITHOUT_OPTIONS,
         DEFAULT_TOS,
         DEFAULT_TOTAL_LENGTH_WITHOUT_OPTIONS,
         DEFAULT_IDENTIFICATION,
@@ -93,5 +119,74 @@ fn can_create_ipv4_without_options() {
     );
 
     let ipv4 = IPV4::new(&packets).unwrap();
-    //  validate_ipv4(ipv4, expected_packet)
+
+    let expected_packet = IPV4Values {
+        expected_version: 8,
+        expected_type_of_service: 15,
+        expected_ihl: 5,
+        expected_total_length: 25,
+        expected_id: 2078,
+        expected_flags: 5,
+        expected_fragment_offset: 5840,
+        expected_ttl: 60,
+        expected_protocol: IPType::from(6),
+        expected_header_checksum: 25612,
+        expected_source_address: Ipv4Addr::new(100, 127, 60, 5),
+        expected_destination_address: Ipv4Addr::new(30, 44, 8, 50),
+        expected_options: None,
+        expected_payload: &[50, 12, 45, 19, 23],
+    };
+
+    validate_ipv4(ipv4, expected_packet)
+}
+
+#[test]
+fn can_create_ipv4_with_options() {
+    let packets = generate_mock_packet(
+        DEFAULT_VERSION_IHL_WITH_OPTIONS,
+        DEFAULT_TOS,
+        DEFAULT_TOTAL_LENGTH_WITH_OPTIONS,
+        DEFAULT_IDENTIFICATION,
+        DEFAULT_FLAGS_FRAGMENT,
+        DEFAULT_TTL,
+        DEFAULT_PROTOCOL,
+        DEFAULT_HEADER_CHECKSUM,
+        DEFAULT_SRC_ADDR,
+        DEFAULT_DEST_ADDR,
+        Some(&DEFAULT_OPTIONS),
+        &DEFAULT_PAYLOAD,
+    );
+
+    let ipv4 = IPV4::new(&packets).unwrap();
+
+    let expected_packet = IPV4Values {
+        expected_version: 8,
+        expected_type_of_service: 15,
+        expected_ihl: 6,
+        expected_total_length: 29,
+        expected_id: 2078,
+        expected_flags: 5,
+        expected_fragment_offset: 5840,
+        expected_ttl: 60,
+        expected_protocol: IPType::from(6),
+        expected_header_checksum: 25612,
+        expected_source_address: Ipv4Addr::new(100, 127, 60, 5),
+        expected_destination_address: Ipv4Addr::new(30, 44, 8, 50),
+        expected_options: Some(DEFAULT_OPTIONS.to_vec()),
+        expected_payload: &[50, 12, 45, 19, 23],
+    };
+
+    validate_ipv4(ipv4, expected_packet)
+}
+
+#[test]
+fn fails_if_packet_is_malformed() {
+    let result = IPV4::new(&MOCK_MALFORMED_PACKET);
+
+    let malformed_frame_size = MOCK_MALFORMED_PACKET.to_vec().len();
+
+    assert!(matches!(
+        result,
+        Err(ParserError::PacketTooShort(malformed_frame_size, 20))
+    ));
 }
