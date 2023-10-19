@@ -1,40 +1,24 @@
 use thiserror::Error;
 
-#[derive(Error, Debug)]
-pub enum EthernetFrameError {
-    #[error("Failed to extract MAC address: {source}")]
-    MacAddressExtractionError {
-        #[source]
-        source: std::array::TryFromSliceError,
-    },
+use std::fmt;
 
-    #[error("Frame too short got `{0}`, expected `{1}` `{2}`")]
-    FrameTooShort(usize, usize, String),
-
-    #[error("Failed to extract Q-Tag: {source}")]
-    QTagExtractionError {
-        #[source]
-        source: std::array::TryFromSliceError,
-    },
-
-    #[error("Failed to extract ether type: {source}")]
-    EtherTypeExtractionError {
-        #[source]
-        source: std::array::TryFromSliceError,
-    },
-
-    #[error("Failed to extract FCS: {source}")]
-    FCSExtractionError {
-        #[source]
-        source: std::array::TryFromSliceError,
-    },
-
-    #[error("Invalid EtherType")]
-    InvalidEtherType,
-
-    #[error("Invalid ethernet frame. Frame has `{0}` bytes")]
-    InvalidEthernetFrame(usize),
+#[derive(Debug)]
+pub enum ErrorSource {
+    Io(std::io::Error),
+    TryFromSlice(std::array::TryFromSliceError),
 }
+
+// Implementing the std::fmt::Display trait to enable printing the error.
+impl fmt::Display for ErrorSource {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ErrorSource::Io(e) => write!(f, "IO error: {}", e),
+            ErrorSource::TryFromSlice(e) => write!(f, "Try from slice error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for ErrorSource {}
 
 #[derive(Error, Debug)]
 pub enum ParserError {
@@ -42,7 +26,7 @@ pub enum ParserError {
     ExtractionError {
         string: String,
         #[source]
-        source: std::io::Error,
+        source: ErrorSource,
     },
 
     #[error("Failed to seek in cursor for `{string}`")]
@@ -55,6 +39,12 @@ pub enum ParserError {
     #[error("Packet too short got `{0}`, expected at least `{1}`")]
     PacketTooShort(usize, usize),
 
+    #[error("Packet too short got `{0}`, expected at least `{1}`")]
+    FrameTooShort(usize, usize),
+
     #[error("Invalid IHL value got `{0}`, expected >=`{1}` or <= `{2}`")]
     InvalidIHLValue(u32, u8, u8),
+
+    #[error("Invalid EtherType")]
+    InvalidEtherType,
 }

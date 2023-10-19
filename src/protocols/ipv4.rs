@@ -15,7 +15,7 @@
 // |                    Options                    |    Padding    |
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
-use super::errors::ParserError;
+use super::errors::{ErrorSource, ParserError};
 
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::net::Ipv4Addr;
@@ -216,7 +216,7 @@ impl IPV4 {
         cursor
             .read_exact(&mut buffer)
             .map_err(|e| ParserError::ExtractionError {
-                source: e,
+                source: ErrorSource::Io(e),
                 string: field.to_string(),
             })?;
 
@@ -237,7 +237,7 @@ impl IPV4 {
         cursor
             .read_exact(&mut buffer)
             .map_err(|e| ParserError::ExtractionError {
-                source: e,
+                source: ErrorSource::Io(e),
                 string: field.to_string(),
             })?;
 
@@ -258,7 +258,7 @@ impl IPV4 {
         cursor
             .read_exact(&mut buffer)
             .map_err(|e| ParserError::ExtractionError {
-                source: e,
+                source: ErrorSource::Io(e),
                 string: field.to_string(),
             })?;
 
@@ -284,7 +284,7 @@ impl IPV4 {
         cursor
             .read_exact(&mut buffer)
             .map_err(|e| ParserError::ExtractionError {
-                source: e,
+                source: ErrorSource::Io(e),
                 string: field.to_string(),
             })?;
 

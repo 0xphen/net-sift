@@ -15,14 +15,20 @@
 // | FCS (4 bytes)             |
 // +---------------------------+
 
-use super::{constants, errors::EthernetFrameError};
+use super::{
+    constants,
+    errors::{ErrorSource, ParserError},
+};
 
 use std::fmt;
+use std::io::{Cursor, Read, Seek, SeekFrom};
 
 const MAC_ADDRESS_BYTES: usize = 6;
 
-/// Represents a MAC address.
-#[derive(Debug)]
+/// A struct representing a Media Access Control (MAC) address, used for identifying network hardware.
+///
+/// It contains a single field, a 6-byte array, as MAC addresses are 6 bytes in length.
+#[derive(Debug, PartialEq)]
 pub struct MacAddress(pub [u8; MAC_ADDRESS_BYTES]);
 
 impl MacAddress {
@@ -41,6 +47,8 @@ impl MacAddress {
 }
 
 impl fmt::Display for MacAddress {
+    /// Formats the MAC address for display purposes.
+    /// This implementation will print the MAC address in the common hex notation, separated by colons.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -50,17 +58,32 @@ impl fmt::Display for MacAddress {
     }
 }
 
-/// Tag Protocol Identifier for VLAN-tagged frames.
-const TPID_VLAN: [u8; 2] = [0x81, 0x00];
+#[derive(Debug, PartialEq)]
+pub enum EtherType {
+    IPv4,
+    IPv6,
+    ARP,
+    Other(u16),
+}
 
-/// Offset for the destination MAC address in an Ethernet frame.
+impl From<u16> for EtherType {
+    fn from(raw: u16) -> Self {
+        match raw {
+            0x0800 => Self::IPv4,
+            0x86DD => Self::IPv6,
+            0x0806 => Self::ARP,
+            other => Self::Other(other),
+        }
+    }
+}
+
+// Constants representing various parameters and offsets within an Ethernet frame.
+// These are used for parsing the frame correctly.
+const TPID_VLAN: u32 = 33024; // [0x81, 0x00];
+const Q_TAG_OR_ETHER_TYPE_OFFSET: u64 = 12;
+const BITMASK_Q_TAG: u32 = 0xFFFFFFFF;
 const OFFSET_MAC_DEST: usize = 0;
-
-/// Offset for the source MAC address in an Ethernet frame.
 const OFFSET_MAC_SRC: usize = 6;
-
-/// Offset for the TPID in an Ethernet frame, potentially indicating a VLAN tag.
-const OFFSET_TPID: usize = 12;
 
 /// An Ethernet frame representation.
 ///
@@ -82,16 +105,15 @@ const OFFSET_TPID: usize = 12;
 ///   For example, `0x0800` indicates IPv4.
 /// * `payload`: The encapsulated data within the Ethernet frame. Its content and interpretation
 ///   are determined by the `ether_type`.
-/// * `fcs`: The Frame Check Sequence (FCS) for error-checking. It's typically used to check the
-///   integrity of the transmitted data.
+/// Note: The Frame Check Sequence (FCS) is not represented here as
+/// it's used only for the frame's integrity check.
 #[derive(Debug)]
 pub struct EthernetFrame {
     pub mac_destination: MacAddress, // Destination MAC address
     pub mac_source: MacAddress,      // Source MAC address
-    pub q_tag: Option<[u8; 4]>,      // Optional Q-tag for VLAN-tagged frames
-    pub ether_type: [u8; 2],         // EtherType indicating the upper-layer protocol
+    pub q_tag: Option<u32>,          // Optional Q-tag for VLAN-tagged frames
+    pub ether_type: EtherType,       // EtherType indicating the upper-layer protocol
     pub payload: Vec<u8>,            // Frame's payload/data
-    pub fcs: [u8; 4],                // Frame Check Sequence for error-checking
 }
 
 impl EthernetFrame {
@@ -125,36 +147,56 @@ impl EthernetFrame {
     /// # Returns
     ///
     /// Returns an `EthernetFrame` instance populated with the extracted data.
-    pub fn new(frame: Vec<u8>) -> Result<Self, EthernetFrameError> {
+    pub fn new(frame: &[u8]) -> Result<Self, ParserError> {
         if frame.len() < constants::MIN_FRAME_SIZE {
-            return Err(EthernetFrameError::InvalidEthernetFrame(frame.len()));
+            return Err(ParserError::FrameTooShort(
+                frame.len(),
+                constants::MIN_FRAME_SIZE,
+            ));
         }
 
-        // Directly extract potential MAC addresses and EtherType
         let mac_destination_bytes: [u8; 6] =
             EthernetFrame::extract_mac_address(&frame, OFFSET_MAC_DEST)?;
 
         let mac_source_bytes: [u8; 6] = Self::extract_mac_address(&frame, OFFSET_MAC_SRC)?;
 
-        let (q_tag, ether_type_offset) = Self::extract_q_tag(&frame, OFFSET_TPID)?;
+        let mut cursor: Cursor<&[u8]> = Cursor::new(frame);
+        cursor
+            .seek(SeekFrom::Start(Q_TAG_OR_ETHER_TYPE_OFFSET))
+            .map_err(|e| ParserError::CursorError {
+                string: "Options".to_string(),
+                source: e,
+            })?;
 
-        let ether_type: [u8; 2] = Self::extract_ether_type(&frame, ether_type_offset)?;
+        let mac_tag_type = Self::read_u32(&mut cursor, "QTAG_&_ETHERTYPE")?;
 
-        if !constants::ACCEPTED_ETHERTYPES.contains(&ether_type) {
-            return Err(EthernetFrameError::InvalidEtherType);
+        let (q_tag, ether_type) = match mac_tag_type >> 16 {
+            TPID_VLAN => {
+                let e_t = Self::read_u16(&mut cursor, "Ether Type")?;
+                (Some(mac_tag_type & BITMASK_Q_TAG), e_t)
+            }
+            _ => {
+                // QTag isn't present in the frame, hence we move the cursor
+                // back 2 positions.
+                cursor.set_position(cursor.position() - 2);
+                (None, (mac_tag_type >> 16) as u16)
+            }
+        };
+
+        if !constants::ACCEPTED_ETHERTYPES.contains(&ether_type.to_be_bytes()) {
+            return Err(ParserError::InvalidEtherType);
         }
 
-        let fcs = frame[frame.len().saturating_sub(4)..frame.len()]
-            .try_into()
-            .map_err(|e| EthernetFrameError::FCSExtractionError { source: e })?;
+        let fcs_offset = frame.len() - 4;
+        let payload_size = fcs_offset as u64 - cursor.position();
+        let payload = Self::read_arbitrary_length(&mut cursor, payload_size as usize, "Payload")?;
 
         Ok(EthernetFrame {
             mac_destination: MacAddress::from_bytes(mac_destination_bytes),
             mac_source: MacAddress::from_bytes(mac_source_bytes),
             q_tag,
-            ether_type,
-            fcs,
-            payload: frame[ether_type_offset + 2..(frame.len() - 4)].to_vec(),
+            ether_type: EtherType::from(ether_type),
+            payload,
         })
     }
 
@@ -179,95 +221,112 @@ impl EthernetFrame {
     /// enough bytes from the offset to extract a MAC address.
     /// * `EthernetFrameError::MacAddressExtractionError` if there's an issue
     ///  during the extraction process.
-    fn extract_mac_address(frame: &[u8], offset: usize) -> Result<[u8; 6], EthernetFrameError> {
+    fn extract_mac_address(frame: &[u8], offset: usize) -> Result<[u8; 6], ParserError> {
         if frame.len() < offset + 6 {
-            return Err(EthernetFrameError::FrameTooShort(
-                frame.len(),
-                6,
-                "Src/Dest MAC Address".to_string(),
-            ));
+            return Err(ParserError::FrameTooShort(frame.len(), 6));
         }
 
         frame[offset..offset + 6]
             .try_into()
-            .map_err(|e| EthernetFrameError::MacAddressExtractionError { source: e })
+            .map_err(|e| ParserError::ExtractionError {
+                source: ErrorSource::TryFromSlice(e),
+                string: "Src/Dest MAC Address".to_string(),
+            })
     }
 
-    /// Extracts the EtherType from an Ethernet frame.
-    ///
-    /// The EtherType field in an Ethernet frame identifies the next level protocol
-    /// (for example, IPv4 or IPv6). This function extracts the EtherType based on
-    /// a given offset.
+    /// Reads a 128-bit unsigned integer from the current position of the cursor in big-endian format.
     ///
     /// # Arguments
     ///
-    /// * `frame` - A reference to the slice representing the Ethernet frame.
-    /// * `offset` - The starting index in the frame where the EtherType is expected.
+    /// * `cursor` - A cursor over the byte slice from which the data will be read.
+    /// * `field` - A description of the data field, used for error messages.
     ///
     /// # Returns
     ///
-    /// Returns a `Result` containing a two-byte array representing the EtherType.
-    /// In case of an error (like if the frame is too short to contain the EtherType at the given offset),
-    /// it returns an `EthernetFrameError`.
-    fn extract_ether_type(frame: &[u8], offset: usize) -> Result<[u8; 2], EthernetFrameError> {
-        if frame.len() < offset + 2 {
-            return Err(EthernetFrameError::FrameTooShort(
-                frame.len(),
-                2,
-                "Ether-Type".to_string(),
-            ));
-        }
+    /// Returns a `Result` containing the `u128` value if successful, otherwise a `ParserError::ExtractionError`.
+    fn read_u32(cursor: &mut Cursor<&[u8]>, field: &str) -> Result<u32, ParserError> {
+        let mut buffer: [u8; 4] = Default::default();
 
-        frame[offset..offset + 2]
-            .try_into()
-            .map_err(|e| EthernetFrameError::EtherTypeExtractionError { source: e })
+        cursor
+            .read_exact(&mut buffer)
+            .map_err(|e| ParserError::ExtractionError {
+                string: field.to_string(),
+                source: ErrorSource::Io(e),
+            })?;
+
+        Ok(u32::from_be_bytes(buffer))
     }
 
-    /// Extracts the Q-Tag (VLAN tag) from an Ethernet frame, if present.
-    ///
-    /// The Q-Tag is an optional 4-byte field in an Ethernet frame that signifies
-    /// VLAN membership and priority information. The first two bytes of this tag
-    /// are typically `0x8100`, which is used to indicate its presence.
+    /// Reads a 16-bit unsigned integer from the cursor's current position in big-endian format.
     ///
     /// # Arguments
     ///
-    /// * `frame`: A slice representing the Ethernet frame.
-    /// * `offset`: The starting position in the frame where the Q-Tag might be present.
+    /// * `cursor` - A reference to the cursor in the byte slice being read.
+    /// * `field` - A descriptor for the data field, used in error messaging.
     ///
     /// # Returns
     ///
-    /// If successful, this function returns a tuple containing:
-    /// 1. An `Option<[u8; 4]>` representing the Q-Tag bytes if present; `None` otherwise.
-    /// 2. The next reading offset after the Q-Tag (or after where it would have been, if not present).
-    ///
-    /// If there's an error, it returns an `EthernetFrameError`.
-    ///
-    /// # Errors
-    ///
-    /// This function can return an error if:
-    /// - The frame is too short to contain the expected Q-Tag bytes.
-    /// - There's an issue extracting the Q-Tag bytes.
-    ///
-    fn extract_q_tag(
-        frame: &[u8],
-        offset: usize,
-    ) -> Result<(Option<[u8; 4]>, usize), EthernetFrameError> {
-        if frame.len() < offset + 4 {
-            return Err(EthernetFrameError::FrameTooShort(
-                frame.len(),
-                4,
-                "Q-Tag".to_string(),
-            ));
-        }
+    /// A `Result` containing the `u16` value if successful, or a `ParserError::ExtractionError` on failure.
+    fn read_u16(cursor: &mut Cursor<&[u8]>, field: &str) -> Result<u16, ParserError> {
+        let mut buffer: [u8; 2] = Default::default();
 
-        match &frame[offset..offset + 2] {
-            [81, 00] => {
-                let q_tag_bytes: [u8; 4] = frame[offset..offset + 4]
-                    .try_into()
-                    .map_err(|e| EthernetFrameError::QTagExtractionError { source: e })?;
-                Ok((Some(q_tag_bytes), offset + 4))
-            }
-            _ => Ok((None, offset)),
-        }
+        cursor
+            .read_exact(&mut buffer)
+            .map_err(|e| ParserError::ExtractionError {
+                string: field.to_string(),
+                source: ErrorSource::Io(e),
+            })?;
+
+        Ok(u16::from_be_bytes(buffer))
     }
+
+    /// Reads a specified number of bytes from the cursor's current position.
+    ///
+    /// # Arguments
+    ///
+    /// * `cursor` - A reference to the cursor in the byte slice being read.
+    /// * `length` - The number of bytes to read.
+    /// * `field` - A descriptor for the data field, used in error messaging.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a vector of the bytes read, or a `ParserError::ExtractionError` on failure.
+    fn read_arbitrary_length(
+        cursor: &mut Cursor<&[u8]>,
+        length: usize,
+        field: &str,
+    ) -> Result<Vec<u8>, ParserError> {
+        let mut buffer = vec![0; length];
+
+        cursor
+            .read_exact(&mut buffer)
+            .map_err(|e| ParserError::ExtractionError {
+                source: ErrorSource::Io(e),
+                string: field.to_string(),
+            })?;
+
+        Ok(buffer)
+    }
+
+    // /// Extracts a MAC address from a 64-bit integer, ignoring the 2 most significant bytes.
+    // ///
+    // /// The function focuses on the 48 bits that represent the MAC address, skipping the first 16 bits.
+    // ///
+    // /// # Arguments
+    // ///
+    // /// * `v` - A 64-bit integer containing the MAC address in the 48 least significant bits.
+    // ///
+    // /// # Returns
+    // ///
+    // /// A 6-element byte array representing the MAC address.
+    // fn extract_mac_address(v: u64) -> [u8; 6] {
+    //     [
+    //         (v >> 40) as u8,
+    //         ((v >> 32) & 0xFF) as u8,
+    //         ((v >> 24) & 0xFF) as u8,
+    //         ((v >> 16) & 0xFF) as u8,
+    //         ((v >> 8) & 0xFF) as u8,
+    //         (v & 0xFF) as u8,
+    //     ]
+    // }
 }
