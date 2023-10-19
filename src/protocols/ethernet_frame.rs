@@ -315,26 +315,4 @@ impl EthernetFrame {
 
         Ok(u16::from_be_bytes(buffer))
     }
-
-    // /// Extracts a MAC address from a 64-bit integer, ignoring the 2 most significant bytes.
-    // ///
-    // /// The function focuses on the 48 bits that represent the MAC address, skipping the first 16 bits.
-    // ///
-    // /// # Arguments
-    // ///
-    // /// * `v` - A 64-bit integer containing the MAC address in the 48 least significant bits.
-    // ///
-    // /// # Returns
-    // ///
-    // /// A 6-element byte array representing the MAC address.
-    // fn extract_mac_address(v: u64) -> [u8; 6] {
-    //     [
-    //         (v >> 40) as u8,
-    //         ((v >> 32) & 0xFF) as u8,
-    //         ((v >> 24) & 0xFF) as u8,
-    //         ((v >> 16) & 0xFF) as u8,
-    //         ((v >> 8) & 0xFF) as u8,
-    //         (v & 0xFF) as u8,
-    //     ]
-    // }
 }
