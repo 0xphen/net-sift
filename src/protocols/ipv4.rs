@@ -51,9 +51,9 @@ impl From<u8> for IPType {
 }
 
 #[derive(Debug)]
-pub struct IPV4 {
+pub struct Ipv4 {
     /// A single-byte field indicating the version of the IP protocol.
-    /// For IPv4, this is typically set to 4.
+    /// For Ipv4, this is typically set to 4.
     pub version: u8,
 
     pub type_of_service: u8,
@@ -104,7 +104,7 @@ pub struct IPV4 {
     pub payload: Vec<u8>,
 }
 
-impl IPV4 {
+impl Ipv4 {
     /// Constructs a new instance of `IPV4` by parsing raw packet data.
     ///
     /// This function expects `packets` to contain the raw bytes of an IPv4 packet and
@@ -167,7 +167,7 @@ impl IPV4 {
             total_length,
         )?;
 
-        Ok(IPV4 {
+        Ok(Ipv4 {
             version,
             internet_header_length,
             type_of_service,

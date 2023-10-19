@@ -37,3 +37,16 @@ pub fn read_arbitrary_length(
 
     Ok(buffer)
 }
+
+pub fn read_u32(cursor: &mut Cursor<&[u8]>, field: &str) -> Result<u32, ParserError> {
+    let mut buffer: [u8; 4] = Default::default();
+
+    cursor
+        .read_exact(&mut buffer)
+        .map_err(|e| ParserError::ExtractionError {
+            string: field.to_string(),
+            source: ErrorSource::Io(e),
+        })?;
+
+    Ok(u32::from_be_bytes(buffer))
+}

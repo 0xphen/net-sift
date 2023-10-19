@@ -1,4 +1,4 @@
-use net_sift::protocols::{errors::ParserError, ipv4::IPType, ipv4::IPV4};
+use net_sift::protocols::{errors::ParserError, ipv4::IPType, ipv4::Ipv4};
 
 use std::net::Ipv4Addr;
 
@@ -82,7 +82,7 @@ fn generate_mock_packet(
     packets
 }
 
-fn validate_ipv4(packet: IPV4, expected_packet: IPV4Values) {
+fn validate_ipv4(packet: Ipv4, expected_packet: IPV4Values) {
     assert!(packet.version == expected_packet.expected_version);
     assert!(packet.internet_header_length == expected_packet.expected_ihl);
     assert!(packet.type_of_service == expected_packet.expected_type_of_service);
