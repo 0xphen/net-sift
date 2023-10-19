@@ -161,6 +161,8 @@ impl EthernetFrame {
         let mac_source_bytes: [u8; 6] = Self::extract_mac_address(&frame, OFFSET_MAC_SRC)?;
 
         let mut cursor: Cursor<&[u8]> = Cursor::new(frame);
+        // Since we already extracted the MAC addresses, we move the cursor
+        // to the next index after the MAC addresses.
         cursor
             .seek(SeekFrom::Start(Q_TAG_OR_ETHER_TYPE_OFFSET))
             .map_err(|e| ParserError::CursorError {
@@ -168,24 +170,10 @@ impl EthernetFrame {
                 source: e,
             })?;
 
-        let mac_tag_type = Self::read_u32(&mut cursor, "QTAG_&_ETHERTYPE")?;
+        let q_tag_ether_bytes = Self::read_u32(&mut cursor, "QTAG_&_ETHERTYPE")?;
 
-        let (q_tag, ether_type) = match mac_tag_type >> 16 {
-            TPID_VLAN => {
-                let e_t = Self::read_u16(&mut cursor, "Ether Type")?;
-                (Some(mac_tag_type & BITMASK_Q_TAG), e_t)
-            }
-            _ => {
-                // QTag isn't present in the frame, hence we move the cursor
-                // back 2 positions.
-                cursor.set_position(cursor.position() - 2);
-                (None, (mac_tag_type >> 16) as u16)
-            }
-        };
-
-        if !constants::ACCEPTED_ETHERTYPES.contains(&ether_type.to_be_bytes()) {
-            return Err(ParserError::InvalidEtherType);
-        }
+        let (q_tag, ether_type) =
+            Self::parse_vlan_tag_and_ether_type(&mut cursor, q_tag_ether_bytes)?;
 
         let fcs_offset = frame.len() - 4;
         let payload_size = fcs_offset as u64 - cursor.position();
@@ -198,6 +186,53 @@ impl EthernetFrame {
             ether_type: EtherType::from(ether_type),
             payload,
         })
+    }
+
+    /// Parses the VLAN tag (if present) and the EtherType from a segment of network packet data.
+    ///
+    /// Given a cursor reference within a network packet and a 4-byte segment that potentially contains
+    /// VLAN tagging information (Q-tag) and EtherType, this function discerns whether a VLAN tag is
+    /// present and extracts the EtherType. It adjusts the cursor position based on the presence of the
+    /// VLAN tag.
+    ///
+    /// The function operates by examining the two higher-order bytes of `q_tag_ether_bytes` for the
+    /// VLAN TPID. If the TPID indicates a VLAN tag, the tag is extracted along with the EtherType.
+    /// If not, the cursor is adjusted, assuming the two bytes are part of the EtherType, not a VLAN tag.
+    ///
+    /// # Arguments
+    ///
+    /// * `cursor` - A mutable reference to a cursor positioned at the relevant segment
+    ///  of a network packet data slice.
+    /// * `q_tag_ether_bytes` - A 32-bit value possibly containing a VLAN tag and EtherType,
+    ///  specifically the two bytes for the potential tag and two bytes for the EtherType.
+    ///
+    /// # Returns
+    ///
+    /// This function returns a tuple containing two elements wrapped in `Result`:
+    /// * `Option<u32>` - The VLAN tag present as a 32-bit value, or `None` if a VLAN tag isn't found.
+    /// * `u16` - The 16-bit EtherType value extracted from the packet data.
+    fn parse_vlan_tag_and_ether_type(
+        cursor: &mut Cursor<&[u8]>,
+        q_tag_ether_bytes: u32,
+    ) -> Result<(Option<u32>, u16), ParserError> {
+        let (q_tag, ether_type) = match q_tag_ether_bytes >> 16 {
+            TPID_VLAN => {
+                let e_t = Self::read_u16(cursor, "Ether Type")?;
+                (Some(q_tag_ether_bytes & BITMASK_Q_TAG), e_t)
+            }
+            _ => {
+                // QTag isn't present in the frame, hence we move the cursor
+                // back 2 positions.
+                cursor.set_position(cursor.position() - 2);
+                (None, (q_tag_ether_bytes >> 16) as u16)
+            }
+        };
+
+        if !constants::ACCEPTED_ETHERTYPES.contains(&ether_type.to_be_bytes()) {
+            return Err(ParserError::InvalidEtherType);
+        }
+
+        Ok((q_tag, ether_type))
     }
 
     /// Extracts a MAC address from the ethernet frame based on a specified offset.
