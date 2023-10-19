@@ -18,6 +18,7 @@
 use super::{
     constants,
     errors::{ErrorSource, ParserError},
+    utils::read_arbitrary_length,
 };
 
 use std::fmt;
@@ -177,7 +178,7 @@ impl EthernetFrame {
 
         let fcs_offset = frame.len() - 4;
         let payload_size = fcs_offset as u64 - cursor.position();
-        let payload = Self::read_arbitrary_length(&mut cursor, payload_size as usize, "Payload")?;
+        let payload = read_arbitrary_length(&mut cursor, payload_size as usize, "Payload")?;
 
         Ok(EthernetFrame {
             mac_destination: MacAddress::from_bytes(mac_destination_bytes),
@@ -313,34 +314,6 @@ impl EthernetFrame {
             })?;
 
         Ok(u16::from_be_bytes(buffer))
-    }
-
-    /// Reads a specified number of bytes from the cursor's current position.
-    ///
-    /// # Arguments
-    ///
-    /// * `cursor` - A reference to the cursor in the byte slice being read.
-    /// * `length` - The number of bytes to read.
-    /// * `field` - A descriptor for the data field, used in error messaging.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing a vector of the bytes read, or a `ParserError::ExtractionError` on failure.
-    fn read_arbitrary_length(
-        cursor: &mut Cursor<&[u8]>,
-        length: usize,
-        field: &str,
-    ) -> Result<Vec<u8>, ParserError> {
-        let mut buffer = vec![0; length];
-
-        cursor
-            .read_exact(&mut buffer)
-            .map_err(|e| ParserError::ExtractionError {
-                source: ErrorSource::Io(e),
-                string: field.to_string(),
-            })?;
-
-        Ok(buffer)
     }
 
     // /// Extracts a MAC address from a 64-bit integer, ignoring the 2 most significant bytes.

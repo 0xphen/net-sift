@@ -15,7 +15,10 @@
 // |                    Options                    |    Padding    |
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
-use super::errors::{ErrorSource, ParserError};
+use super::{
+    errors::{ErrorSource, ParserError},
+    utils::read_arbitrary_length,
+};
 
 use std::io::{Cursor, Read, Seek, SeekFrom};
 use std::net::Ipv4Addr;
@@ -173,16 +176,12 @@ impl IPV4 {
                     source: e,
                 })?;
 
-            options = Some(Self::read_arbitrary_length(
-                &mut cursor,
-                options_size,
-                "Options",
-            )?);
+            options = Some(read_arbitrary_length(&mut cursor, options_size, "Options")?);
         }
 
         let payload_size = total_length - (internet_header_length as u16 * 4);
 
-        payload = Self::read_arbitrary_length(&mut cursor, payload_size as usize, "Payload")?;
+        payload = read_arbitrary_length(&mut cursor, payload_size as usize, "Payload")?;
 
         Ok(IPV4 {
             version,
@@ -265,31 +264,6 @@ impl IPV4 {
         Ok(u32::from_be_bytes(buffer))
     }
 
-    /// Reads a specified number of bytes from the cursor's current position.
-    ///
-    /// # Arguments
-    /// - `cursor`: The cursor pointing to the data.
-    /// - `length`: The number of bytes to read.
-    /// - `field`: The name of the field being read, for error context.
-    ///
-    /// # Returns
-    /// - `Result<Vec<u8>, ParserError>`: The read bytes as a `Vec<u8>` or an error.
-    fn read_arbitrary_length(
-        cursor: &mut Cursor<&[u8]>,
-        length: usize,
-        field: &str,
-    ) -> Result<Vec<u8>, ParserError> {
-        let mut buffer = vec![0; length];
-
-        cursor
-            .read_exact(&mut buffer)
-            .map_err(|e| ParserError::ExtractionError {
-                source: ErrorSource::Io(e),
-                string: field.to_string(),
-            })?;
-
-        Ok(buffer)
-    }
     /// Calculate offsets and sizes for the optional "options" field and the "payload" data
     /// based on the Internet Header Length (IHL) field in the IPv4 header.
     ///
