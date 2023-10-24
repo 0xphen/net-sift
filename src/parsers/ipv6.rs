@@ -23,10 +23,10 @@
 
 use super::{
     errors::{ErrorSource, ParserError},
-    utils::{read_arbitrary_length, read_u32},
+    utils::read_u32,
 };
 
-use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::io::Cursor;
 use std::net::Ipv6Addr;
 
 const SRC_ADDRESS_OFFSET: usize = 63;
@@ -47,6 +47,35 @@ pub struct Ipv6 {
 }
 
 impl Ipv6 {
+    /// Constructs a new `Ipv6` object from a slice of bytes representing
+    /// an IPv6 packet.
+    /// This function parses the byte slice, extracting essential
+    ///  components of the IPv6 header and payload, including the
+    /// version, traffic class, flow label, payload length, next header,
+    ///  hop limit, source address, destination address, and the
+    ///  payload itself. It then constructs an `Ipv6` object
+    ///  containing these components.
+    ///
+    /// # Parameters
+    /// - `packets`: A byte slice representing a complete IPv6
+    /// packet, including both header and payload.
+    ///
+    /// # Returns
+    /// If the operation is successful, the function returns an
+    /// `Ok` wrapping the `Ipv6` object.
+    /// If there's an error during parsing, it returns an `Err`
+    ///  wrapping a `ParserError` variant indicating the
+    /// kind of error that occurred (e.g., the packet is too short,
+    ///  data extraction error, etc.).
+    ///
+    /// # Errors
+    /// This function will return an error in the following situations,
+    /// but is not limited to just these cases:
+    /// - The packet is too short to contain a valid IPv6 header.
+    /// - There's an error extracting data for one of the packet's components.
+    /// - There's an inconsistency between the stated payload length
+    ///  and the actual data available.
+    // TODO: Optimise this function. Use of cursor and slice isn't efficient
     pub fn new(packets: &[u8]) -> Result<Self, ParserError> {
         let mut cursor = Cursor::new(packets);
 

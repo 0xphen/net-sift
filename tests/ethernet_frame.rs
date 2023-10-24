@@ -1,4 +1,4 @@
-use net_sift::protocols::{
+use net_sift::parsers::{
     errors::ParserError,
     ethernet_frame::{EtherType, EthernetFrame},
 };
