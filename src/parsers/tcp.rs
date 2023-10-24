@@ -82,7 +82,7 @@ pub struct TCP {
     pub flags: Flags,
     pub window_size: u16,
     pub checksum: u16,
-    pub urg_pointer: u16,
+    pub urg_pointer: Option<u16>,
     pub data: Vec<u8>,
 }
 
@@ -189,33 +189,52 @@ impl TCP {
 
         let data_offset = (bytes >> 28) as u8;
         let reserved = ((bytes >> 24) & 0xF) as u8;
-        let mut flags = Flags::new(((bytes >> 16) & 0xFF) as u8);
+        let flags = Flags::new(((bytes >> 16) & 0xFF) as u8);
         let window = (bytes & 0xFFFF) as u16;
 
         Ok((data_offset, reserved, flags, window))
     }
 
-    /// Extracts the TCP segment's checksum and, if applicable, the urgent pointer.
+    /// Extracts the checksum and potentially the urgent pointer from a TCP segment.
+    ///
+    /// The function reads a 32-bit value from the provided cursor, which encompasses both the
+    /// checksum and the urgent pointer field from the TCP segment. The checksum is always extracted,
+    /// whereas the urgent pointer is conditionally extracted based on the value of the `urg` parameter.
     ///
     /// # Arguments
     ///
-    /// * `cursor` - A cursor over the TCP segment data.
-    /// * `urg` - A flag indicating whether the urgent pointer should be extracted.
+    /// * `cursor` - A cursor pointing at the slice of bytes representing the TCP segment. It should be
+    ///              positioned where the 32-bit segment starting with the checksum is located.
+    /// * `urg` - A boolean value indicating whether the urgent pointer field should be considered.
+    ///           If true, the function treats the lower 16 bits of the 32-bit segment as the urgent
+    ///           pointer and includes it in the return value.
     ///
     /// # Returns
     ///
-    /// A result containing a tuple of the checksum and the urgent pointer,
-    /// the latter being present only if `urg` is true
+    /// * On successful read and extraction, returns `Ok` with a tuple. The first element of the tuple
+    ///   is a `u16` representing the checksum. The second element is an `Option<u16>`, which is `Some`
+    ///   with the urgent pointer value if `urg` is true; otherwise, it is `None`.
+    /// * On failure, such as being unable to read enough bytes from the cursor, returns an `Err`
+    ///   containing a `ParserError` variant indicating the nature of the error.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if there is an issue reading from the cursor, such as
+    /// reaching the end of the byte slice prematurely, which would indicate a malformed TCP segment.
     fn extract_tcp_checksum_urg_pointer(
         cursor: &mut Cursor<&[u8]>,
         urg: bool,
-    ) -> Result<(u16, u16), ParserError> {
+    ) -> Result<(u16, Option<u16>), ParserError> {
         let bytes = read_u32(cursor, "Checksum_UrgPointer")?;
 
         // Extracting the checksum from the upper 16 bits.
         let checksum = (bytes >> 16) as u16;
 
-        let urg_pointer = (bytes & 0xFFFF) as u16;
+        let urg_pointer = if urg {
+            Some((bytes & 0xFFFF) as u16)
+        } else {
+            None
+        };
 
         Ok((checksum, urg_pointer))
     }
