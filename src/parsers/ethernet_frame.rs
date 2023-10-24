@@ -108,7 +108,7 @@ const OFFSET_MAC_SRC: usize = 6;
 ///   are determined by the `ether_type`.
 /// Note: The Frame Check Sequence (FCS) is not represented here as
 /// it's used only for the frame's integrity check.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct EthernetFrame {
     pub mac_destination: MacAddress, // Destination MAC address
     pub mac_source: MacAddress,      // Source MAC address

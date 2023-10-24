@@ -50,10 +50,10 @@ impl From<u8> for IPType {
     }
 }
 
-#[derive(Debug)]
-pub struct IPV4 {
+#[derive(Debug, PartialEq)]
+pub struct Ipv4 {
     /// A single-byte field indicating the version of the IP protocol.
-    /// For IPv4, this is typically set to 4.
+    /// For Ipv4, this is typically set to 4.
     pub version: u8,
 
     pub type_of_service: u8,
@@ -104,7 +104,7 @@ pub struct IPV4 {
     pub payload: Vec<u8>,
 }
 
-impl IPV4 {
+impl Ipv4 {
     /// Constructs a new instance of `IPV4` by parsing raw packet data.
     ///
     /// This function expects `packets` to contain the raw bytes of an IPv4 packet and
@@ -161,29 +161,13 @@ impl IPV4 {
         let [a, b, c, d] = u32::to_be_bytes(Self::read_u32(&mut cursor, "Source Address")?);
         let destination_address = Ipv4Addr::new(a, b, c, d);
 
-        // Calculate offsets and sizes for options and payload data.
-        let (options_offset, options_size, _payload_offset) =
-            Self::payload_and_options_offsets(internet_header_length as usize);
+        let (options, payload) = Self::parse_options_and_payload(
+            &mut cursor,
+            internet_header_length as u16,
+            total_length,
+        )?;
 
-        let mut options: Option<Vec<u8>> = Default::default();
-        let payload: Vec<u8>;
-
-        if options_offset != 0 {
-            cursor
-                .seek(SeekFrom::Start(options_offset as u64))
-                .map_err(|e| ParserError::CursorError {
-                    string: "Options".to_string(),
-                    source: e,
-                })?;
-
-            options = Some(read_arbitrary_length(&mut cursor, options_size, "Options")?);
-        }
-
-        let payload_size = total_length - (internet_header_length as u16 * 4);
-
-        payload = read_arbitrary_length(&mut cursor, payload_size as usize, "Payload")?;
-
-        Ok(IPV4 {
+        Ok(Ipv4 {
             version,
             internet_header_length,
             type_of_service,
@@ -199,6 +183,54 @@ impl IPV4 {
             options,
             payload,
         })
+    }
+
+    /// Parses the options and payload from a network packet.
+    ///
+    /// Given the `internet_header_length` and `total_length` from the packet's header,
+    /// this function extracts optional information (if present) and the main payload.
+    ///
+    /// # Parameters
+    /// * `cursor`: A mutable reference to a `Cursor` positioned at the start of the packet data.
+    /// * `internet_header_length`: The header length value from the packet, indicating where option data (if any) starts.
+    /// * `total_length`: The total packet length value, used to calculate the payload's size.
+    ///
+    /// # Returns
+    /// * On success, returns a tuple containing an `Option<Vec<u8>>` for options (None if no options are present)
+    ///   and a `Vec<u8>` for the payload.
+    /// * On failure, returns a `ParserError` indicating the reason for the failure.
+    ///
+    /// # Errors
+    /// * Returns `ParserError::CursorError` if the function fails to seek the cursor to the correct position.
+    /// * May also return other errors encapsulated by `ParserError` if reading from the cursor fails.
+    fn parse_options_and_payload(
+        cursor: &mut Cursor<&[u8]>,
+        internet_header_length: u16,
+        total_length: u16,
+    ) -> Result<(Option<Vec<u8>>, Vec<u8>), ParserError> {
+        // Calculate offsets and sizes for options and payload data.
+        let (options_offset, options_size, _payload_offset) =
+            Self::payload_and_options_offsets(internet_header_length as usize);
+
+        let mut options: Option<Vec<u8>> = Default::default();
+        let payload: Vec<u8>;
+
+        if options_offset != 0 {
+            cursor
+                .seek(SeekFrom::Start(options_offset as u64))
+                .map_err(|e| ParserError::CursorError {
+                    string: "Options".to_string(),
+                    source: e,
+                })?;
+
+            options = Some(read_arbitrary_length(cursor, options_size, "Options")?);
+        }
+
+        let payload_size = total_length - (internet_header_length as u16 * 4);
+
+        payload = read_arbitrary_length(cursor, payload_size as usize, "Payload")?;
+
+        Ok((options, payload))
     }
 
     /// Reads a single byte (`u8`) from the cursor's current position.

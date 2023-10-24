@@ -1,4 +1,4 @@
-use net_sift::protocols::{errors::ParserError, ipv4::IPType, ipv4::IPV4};
+use net_sift::parsers::{errors::ParserError, ipv4::IPType, ipv4::Ipv4};
 
 use std::net::Ipv4Addr;
 
@@ -82,7 +82,7 @@ fn generate_mock_packet(
     packets
 }
 
-fn validate_ipv4(packet: IPV4, expected_packet: IPV4Values) {
+fn validate_ipv4(packet: Ipv4, expected_packet: IPV4Values) {
     assert!(packet.version == expected_packet.expected_version);
     assert!(packet.internet_header_length == expected_packet.expected_ihl);
     assert!(packet.type_of_service == expected_packet.expected_type_of_service);
@@ -118,7 +118,7 @@ fn can_create_ipv4_without_options() {
         &DEFAULT_PAYLOAD,
     );
 
-    let ipv4 = IPV4::new(&packets).unwrap();
+    let ipv4 = Ipv4::new(&packets).unwrap();
 
     let expected_packet = IPV4Values {
         expected_version: 8,
@@ -157,7 +157,7 @@ fn can_create_ipv4_with_options() {
         &DEFAULT_PAYLOAD,
     );
 
-    let ipv4 = IPV4::new(&packets).unwrap();
+    let ipv4 = Ipv4::new(&packets).unwrap();
 
     let expected_packet = IPV4Values {
         expected_version: 8,
@@ -181,12 +181,12 @@ fn can_create_ipv4_with_options() {
 
 #[test]
 fn fails_if_packet_is_malformed() {
-    let result = IPV4::new(&MOCK_MALFORMED_PACKET);
+    let result = Ipv4::new(&MOCK_MALFORMED_PACKET);
 
-    let malformed_frame_size = MOCK_MALFORMED_PACKET.to_vec().len();
+    let malformed_packet_size = MOCK_MALFORMED_PACKET.to_vec().len();
 
     assert!(matches!(
         result,
-        Err(ParserError::PacketTooShort(malformed_frame_size, 20))
+        Err(ParserError::PacketTooShort(malformed_packet_size, 20))
     ));
 }
