@@ -29,11 +29,12 @@ use super::{
 use std::io::Cursor;
 use std::net::Ipv6Addr;
 
-const SRC_ADDRESS_OFFSET: usize = 63;
-const DEST_ADDRESS_OFFSET: usize = 191;
-const PAYLOAD_OFFSET: usize = 319;
+const SRC_ADDRESS_OFFSET: usize = 8;
+const DEST_ADDRESS_OFFSET: usize = 24;
+const PAYLOAD_OFFSET: usize = 40;
+const MIN_PACKET_SIZE: usize = 40;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Ipv6 {
     pub version: u8,
     pub traffic_class: u8,
@@ -77,6 +78,10 @@ impl Ipv6 {
     ///  and the actual data available.
     // TODO: Optimise this function. Use of cursor and slice isn't efficient
     pub fn new(packets: &[u8]) -> Result<Self, ParserError> {
+        // Ensure packet is of minimum expected length.
+        if packets.len() < MIN_PACKET_SIZE {
+            return Err(ParserError::PacketTooShort(packets.len(), MIN_PACKET_SIZE));
+        }
         let mut cursor = Cursor::new(packets);
 
         // Parse the first segment of the packet: version, traffic class, and flow label.

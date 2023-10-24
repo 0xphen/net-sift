@@ -50,7 +50,7 @@ impl From<u8> for IPType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Ipv4 {
     /// A single-byte field indicating the version of the IP protocol.
     /// For Ipv4, this is typically set to 4.

@@ -183,10 +183,10 @@ fn can_create_ipv4_with_options() {
 fn fails_if_packet_is_malformed() {
     let result = Ipv4::new(&MOCK_MALFORMED_PACKET);
 
-    let malformed_frame_size = MOCK_MALFORMED_PACKET.to_vec().len();
+    let malformed_packet_size = MOCK_MALFORMED_PACKET.to_vec().len();
 
     assert!(matches!(
         result,
-        Err(ParserError::PacketTooShort(malformed_frame_size, 20))
+        Err(ParserError::PacketTooShort(malformed_packet_size, 20))
     ));
 }
