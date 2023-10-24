@@ -102,8 +102,5 @@ fn can_create_ipv6() {
 fn fail_if_packet_is_too_short() {
     let result = Ipv6::new(&MOCK_MALFORMED_PACKET);
 
-    assert!(matches!(
-        result,
-        Err(ParserError::PacketTooShort(19, 40))
-    ))
+    assert!(matches!(result, Err(ParserError::PacketTooShort(19, 40))))
 }
