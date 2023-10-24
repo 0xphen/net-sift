@@ -11,8 +11,8 @@ This library offers an efficient and versatile protocol parser for network packe
 | -------------- | ------------------ |
 | Ethernet Frame | :heavy_check_mark: |
 | IPv4    | :heavy_check_mark:          |
-|IPv6 | 🏗️ |
-| TCP (Transmission Control Protocol) | :x:          |
+|IPv6 | :heavy_check_mark: |
+| TCP (Transmission Control Protocol) | 🏗️          |
 | UDP (User Datagram Protocol) | :x:           |
 |ARP (Address Resolution Protocol) | :x:          |
 | HTTP/HTTPS (Hypertext Transfer Protocol/Secure) | :x:          |
