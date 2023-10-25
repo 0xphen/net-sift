@@ -12,7 +12,7 @@ This library offers an efficient and versatile protocol parser for network packe
 | Ethernet Frame | :heavy_check_mark: |
 | IPv4    | :heavy_check_mark:          |
 |IPv6 | :heavy_check_mark: |
-| TCP (Transmission Control Protocol) | 🏗️          |
+| TCP (Transmission Control Protocol) |  :heavy_check_mark:         |
 | UDP (User Datagram Protocol) | 🏗️        
 | ICMP (Internet Control Message Protocol) |  🏗️          |
 |ARP (Address Resolution Protocol) | :x:          |
