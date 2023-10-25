@@ -82,12 +82,18 @@ pub struct TCP {
     pub flags: Flags,
     pub window_size: u16,
     pub checksum: u16,
-    pub urg_pointer: Option<u16>,
+    pub urg_pointer: u16,
     pub data: Vec<u8>,
 }
 
 impl TCP {
     pub fn new(segments: &[u8]) -> Result<Self, ParserError> {
+        if segments.len() < MIN_SEGMENT_SIZE {
+            return Err(ParserError::SegmentTooShort(
+                segments.len(),
+                MIN_SEGMENT_SIZE,
+            ));
+        }
         let mut cursor = Cursor::new(segments);
 
         let (source_port, destination_port) = Self::extract_tcp_ports(&mut cursor)?;
@@ -97,8 +103,7 @@ impl TCP {
         let (data_offset, reserved, flags, window_size) =
             Self::extract_tcp_offset_flags_window(&mut cursor)?;
 
-        let (checksum, urg_pointer) =
-            Self::extract_tcp_checksum_urg_pointer(&mut cursor, flags.urg)?;
+        let (checksum, urg_pointer) = Self::extract_tcp_checksum_urg_pointer(&mut cursor)?;
 
         // Get the size of the options field
         let options_size = (data_offset * 32) / 8 - MIN_SEGMENT_SIZE as u8;
@@ -195,46 +200,31 @@ impl TCP {
         Ok((data_offset, reserved, flags, window))
     }
 
-    /// Extracts the checksum and potentially the urgent pointer from a TCP segment.
+    /// Extracts the TCP segment's checksum and urgent pointer from the given byte sequence.
     ///
-    /// The function reads a 32-bit value from the provided cursor, which encompasses both the
-    /// checksum and the urgent pointer field from the TCP segment. The checksum is always extracted,
-    /// whereas the urgent pointer is conditionally extracted based on the value of the `urg` parameter.
+    /// The function reads 4 bytes from the current position of the cursor:
+    /// - The first 2 bytes (upper 16 bits) represent the checksum.
+    /// - The next 2 bytes (lower 16 bits) represent the urgent pointer.
     ///
     /// # Arguments
     ///
-    /// * `cursor` - A cursor pointing at the slice of bytes representing the TCP segment. It should be
-    ///              positioned where the 32-bit segment starting with the checksum is located.
-    /// * `urg` - A boolean value indicating whether the urgent pointer field should be considered.
-    ///           If true, the function treats the lower 16 bits of the 32-bit segment as the urgent
-    ///           pointer and includes it in the return value.
+    /// * `cursor`: A mutable reference to a cursor over the slice of bytes. The cursor is expected
+    /// to be at the position where the checksum and urgent pointer are located in the TCP segment.
     ///
     /// # Returns
     ///
-    /// * On successful read and extraction, returns `Ok` with a tuple. The first element of the tuple
-    ///   is a `u16` representing the checksum. The second element is an `Option<u16>`, which is `Some`
-    ///   with the urgent pointer value if `urg` is true; otherwise, it is `None`.
-    /// * On failure, such as being unable to read enough bytes from the cursor, returns an `Err`
-    ///   containing a `ParserError` variant indicating the nature of the error.
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if there is an issue reading from the cursor, such as
-    /// reaching the end of the byte slice prematurely, which would indicate a malformed TCP segment.
+    /// This function returns a tuple of two `u16` values inside a `Result`:
+    /// - The first `u16` is the extracted checksum.
+    /// - The second `u16` is the extracted urgent pointer.
     fn extract_tcp_checksum_urg_pointer(
         cursor: &mut Cursor<&[u8]>,
-        urg: bool,
-    ) -> Result<(u16, Option<u16>), ParserError> {
+    ) -> Result<(u16, u16), ParserError> {
         let bytes = read_u32(cursor, "Checksum_UrgPointer")?;
 
         // Extracting the checksum from the upper 16 bits.
         let checksum = (bytes >> 16) as u16;
 
-        let urg_pointer = if urg {
-            Some((bytes & 0xFFFF) as u16)
-        } else {
-            None
-        };
+        let urg_pointer = (bytes & 0xFFFF) as u16;
 
         Ok((checksum, urg_pointer))
     }
