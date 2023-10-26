@@ -50,9 +50,9 @@ struct TcpValues {
     expected_data: Vec<u8>,
 }
 
-impl From<TcpValues> for tcp::TCP {
-    fn from(value: TcpValues) -> tcp::TCP {
-        tcp::TCP {
+impl From<TcpValues> for tcp::TcpSegment {
+    fn from(value: TcpValues) -> tcp::TcpSegment {
+        tcp::TcpSegment {
             source_port: value.expected_src_port,
             destination_port: value.expected_dest_port,
             sequence_number: value.expected_seq_number,
@@ -84,8 +84,8 @@ fn expected_tcp_values(expected_data_offset: u8) -> TcpValues {
     }
 }
 
-fn validate_tcp(tcp: tcp::TCP, expected_tcp: TcpValues) {
-    let expected_tcp = tcp::TCP::from(expected_tcp);
+fn validate_tcp(tcp: tcp::TcpSegment, expected_tcp: TcpValues) {
+    let expected_tcp = tcp::TcpSegment::from(expected_tcp);
     assert_eq!(tcp, expected_tcp);
 }
 
@@ -94,7 +94,7 @@ fn validate_tcp(tcp: tcp::TCP, expected_tcp: TcpValues) {
 #[test]
 fn can_create_tcp_without_options() {
     let segment = generate_mock_segment(DEFAULT_ZERO_OPTIONS_DATA_OFFSET_RESERVED_FLAGS_WINDOW);
-    let tcp = tcp::TCP::from_bytes(&segment).unwrap();
+    let tcp = tcp::TcpSegment::from_bytes(&segment).unwrap();
     let data_offset =
         (u32::from_be_bytes(DEFAULT_ZERO_OPTIONS_DATA_OFFSET_RESERVED_FLAGS_WINDOW) >> 28) as u8;
 
@@ -104,7 +104,7 @@ fn can_create_tcp_without_options() {
 #[test]
 fn can_create_tcp_with_options() {
     let segment = generate_mock_segment(DEFAULT_OPTIONS_DATA_OFFSET_RESERVED_FLAGS_WINDOW);
-    let tcp = tcp::TCP::from_bytes(&segment).unwrap();
+    let tcp = tcp::TcpSegment::from_bytes(&segment).unwrap();
     let data_offset =
         (u32::from_be_bytes(DEFAULT_OPTIONS_DATA_OFFSET_RESERVED_FLAGS_WINDOW) >> 28) as u8;
 
@@ -113,7 +113,7 @@ fn can_create_tcp_with_options() {
 
 #[test]
 fn fail_if_segment_is_too_short() {
-    let result = tcp::TCP::from_bytes(&MOCK_MALFORMED_PACKET);
+    let result = tcp::TcpSegment::from_bytes(&MOCK_MALFORMED_PACKET);
 
     assert!(matches!(result, Err(ParserError::InvalidLength)))
 }

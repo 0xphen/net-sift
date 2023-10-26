@@ -1,4 +1,4 @@
-use net_sift::parsers::{errors::ParserError, ipv6::Ipv6};
+use net_sift::parsers::{errors::ParserError, ipv6::Ipv6Packet};
 
 use std::net::Ipv6Addr;
 
@@ -28,9 +28,9 @@ struct IPv6Values {
     expected_payload: Vec<u8>,
 }
 
-impl From<IPv6Values> for Ipv6 {
-    fn from(value: IPv6Values) -> Ipv6 {
-        Ipv6 {
+impl From<IPv6Values> for Ipv6Packet {
+    fn from(value: IPv6Values) -> Ipv6Packet {
+        Ipv6Packet {
             version: value.expected_version,
             traffic_class: value.expected_traffic_class,
             flow_label: value.expected_flow_label,
@@ -73,8 +73,8 @@ fn expected_ipv6() -> IPv6Values {
     }
 }
 
-fn validate_ipv6(ipv6: Ipv6, expected_ipv6: IPv6Values) {
-    let expected_ipv6 = Ipv6::from(expected_ipv6);
+fn validate_ipv6(ipv6: Ipv6Packet, expected_ipv6: IPv6Values) {
+    let expected_ipv6 = Ipv6Packet::from(expected_ipv6);
     assert_eq!(ipv6, expected_ipv6);
 }
 
@@ -93,14 +93,14 @@ fn addr(v: &[u8; 16]) -> Ipv6Addr {
 #[test]
 fn can_create_ipv6() {
     let packets = generate_mock_packet();
-    let ipv6 = Ipv6::from_bytes(&packets);
+    let ipv6 = Ipv6Packet::from_bytes(&packets);
 
     validate_ipv6(ipv6.unwrap(), expected_ipv6())
 }
 
 #[test]
 fn fail_if_packet_is_too_short() {
-    let result = Ipv6::from_bytes(&MOCK_MALFORMED_PACKET);
+    let result = Ipv6Packet::from_bytes(&MOCK_MALFORMED_PACKET);
 
     assert!(matches!(result, Err(ParserError::InvalidLength)))
 }

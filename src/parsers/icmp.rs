@@ -22,14 +22,26 @@ const DATA_OFFSET_OR_MIN_SIZE: usize = 8;
 
 #[derive(Debug, PartialEq)]
 pub struct IcmpPacket {
-    pub icmp_type: u8,
-    pub icmp_code: u8,
-    pub checksum: u16,
-    pub rest_of_header: u32,
-    pub data: Vec<u8>,
+    pub icmp_type: u8,       // Type of ICMP message.
+    pub icmp_code: u8,       // Subtype to further specify the message.
+    pub checksum: u16,       // Error-checking data calculated from the ICMP message.
+    pub rest_of_header: u32, // Remaining data in the header (depends on type and code).
+    pub data: Vec<u8>,       // Payload or message associated with the ICMP packet.
 }
 
 impl IcmpPacket {
+    /// Constructs a new IcmpPacket from a slice of bytes.
+    ///
+    /// The function expects a byte slice representing a full ICMP packet and returns an
+    /// IcmpPacket instance or an error if the packet is malformed.
+    ///
+    /// # Arguments:
+    ///
+    /// * `packets` - A byte slice containing the ICMP packet data.
+    ///
+    /// # Returns:
+    ///
+    /// * `Result<Self, ParserError>` - An IcmpPacket instance or a ParserError.
     pub fn new(packets: &[u8]) -> Result<Self, ParserError> {
         if packets.len() < DATA_OFFSET_OR_MIN_SIZE {
             return Err(ParserError::InvalidLength);

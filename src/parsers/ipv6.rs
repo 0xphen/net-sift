@@ -35,7 +35,7 @@ const PAYLOAD_OFFSET: usize = 40;
 const MIN_PACKET_SIZE: usize = 40;
 
 #[derive(Debug, PartialEq)]
-pub struct Ipv6 {
+pub struct Ipv6Packet {
     pub version: u8,
     pub traffic_class: u8,
     pub flow_label: u32,
@@ -47,7 +47,7 @@ pub struct Ipv6 {
     pub payload: Vec<u8>,
 }
 
-impl Ipv6 {
+impl Ipv6Packet {
     /// Constructs a new `Ipv6` object from a slice of bytes representing
     /// an IPv6 packet.
     /// This function parses the byte slice, extracting essential
@@ -103,7 +103,7 @@ impl Ipv6 {
         // and addresses, which contains the actual transmitted data.
         let payload = (&packets[PAYLOAD_OFFSET..(packets.len())]).to_vec();
 
-        Ok(Ipv6 {
+        Ok(Ipv6Packet {
             version,
             traffic_class,
             flow_label,

@@ -22,7 +22,7 @@ use std::io::Cursor;
 const DATA_OFFSET_OR_MIN_SIZE: usize = 8;
 
 #[derive(Debug, PartialEq)]
-pub struct UDP {
+pub struct UdpDatagram {
     pub source_port: u16,
     pub destination_port: u16,
     pub length: u16,
@@ -30,7 +30,7 @@ pub struct UDP {
     pub data: Vec<u8>,
 }
 
-impl UDP {
+impl UdpDatagram {
     /// Parses the given UDP packet byte slice and constructs a `UDP` structure.
     ///
     /// This function will read the header fields such as source and destination ports,
@@ -62,7 +62,7 @@ impl UDP {
         let data =
             read_arbitrary_length(&mut cursor, packets.len() - DATA_OFFSET_OR_MIN_SIZE, "Data")?;
 
-        Ok(UDP {
+        Ok(UdpDatagram {
             source_port,
             destination_port,
             length,

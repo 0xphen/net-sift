@@ -72,7 +72,7 @@ const MIN_SEGMENT_SIZE: usize = 20;
 const OPTIONS_OFFSET: usize = 20;
 
 #[derive(Debug, PartialEq)]
-pub struct TCP {
+pub struct TcpSegment {
     pub source_port: u16,
     pub destination_port: u16,
     pub sequence_number: u32,
@@ -86,7 +86,7 @@ pub struct TCP {
     pub data: Vec<u8>,
 }
 
-impl TCP {
+impl TcpSegment {
     pub fn from_bytes(segments: &[u8]) -> Result<Self, ParserError> {
         if segments.len() < MIN_SEGMENT_SIZE {
             return Err(ParserError::InvalidLength);
@@ -122,7 +122,7 @@ impl TCP {
 
         let data = read_arbitrary_length(&mut cursor, segments.len() - payload_offset, "Data")?;
 
-        Ok(TCP {
+        Ok(TcpSegment {
             source_port,
             destination_port,
             sequence_number,
