@@ -116,10 +116,10 @@ impl Ipv4 {
     /// # Returns
     /// - `Result<IPV4, ParserError>`: An `IPV4` instance if the parsing was successful,
     /// or an error indicating the reason for failure.
-    pub fn new(packets: &[u8]) -> Result<Self, ParserError> {
+    pub fn from_bytes(packets: &[u8]) -> Result<Self, ParserError> {
         // Ensure packet is of minimum expected length.
         if packets.len() < MIN_PACKET_SIZE {
-            return Err(ParserError::PacketTooShort(packets.len(), MIN_PACKET_SIZE));
+            return Err(ParserError::InvalidLength);
         }
         let mut cursor = Cursor::new(packets);
 

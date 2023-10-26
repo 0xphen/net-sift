@@ -148,12 +148,9 @@ impl EthernetFrame {
     /// # Returns
     ///
     /// Returns an `EthernetFrame` instance populated with the extracted data.
-    pub fn new(frame: &[u8]) -> Result<Self, ParserError> {
+    pub fn from_bytes(frame: &[u8]) -> Result<Self, ParserError> {
         if frame.len() < constants::MIN_FRAME_SIZE {
-            return Err(ParserError::FrameTooShort(
-                frame.len(),
-                constants::MIN_FRAME_SIZE,
-            ));
+            return Err(ParserError::InvalidLength);
         }
 
         let mac_destination_bytes: [u8; 6] =
@@ -259,7 +256,7 @@ impl EthernetFrame {
     ///  during the extraction process.
     fn extract_mac_address(frame: &[u8], offset: usize) -> Result<[u8; 6], ParserError> {
         if frame.len() < offset + 6 {
-            return Err(ParserError::FrameTooShort(frame.len(), 6));
+            return Err(ParserError::InvalidLength);
         }
 
         frame[offset..offset + 6]

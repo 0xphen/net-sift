@@ -94,7 +94,7 @@ fn validate_tcp(tcp: tcp::TCP, expected_tcp: TcpValues) {
 #[test]
 fn can_create_tcp_without_options() {
     let segment = generate_mock_segment(DEFAULT_ZERO_OPTIONS_DATA_OFFSET_RESERVED_FLAGS_WINDOW);
-    let tcp = tcp::TCP::new(&segment).unwrap();
+    let tcp = tcp::TCP::from_bytes(&segment).unwrap();
     let data_offset =
         (u32::from_be_bytes(DEFAULT_ZERO_OPTIONS_DATA_OFFSET_RESERVED_FLAGS_WINDOW) >> 28) as u8;
 
@@ -104,7 +104,7 @@ fn can_create_tcp_without_options() {
 #[test]
 fn can_create_tcp_with_options() {
     let segment = generate_mock_segment(DEFAULT_OPTIONS_DATA_OFFSET_RESERVED_FLAGS_WINDOW);
-    let tcp = tcp::TCP::new(&segment).unwrap();
+    let tcp = tcp::TCP::from_bytes(&segment).unwrap();
     let data_offset =
         (u32::from_be_bytes(DEFAULT_OPTIONS_DATA_OFFSET_RESERVED_FLAGS_WINDOW) >> 28) as u8;
 
@@ -113,7 +113,7 @@ fn can_create_tcp_with_options() {
 
 #[test]
 fn fail_if_segment_is_too_short() {
-    let result = tcp::TCP::new(&MOCK_MALFORMED_PACKET);
+    let result = tcp::TCP::from_bytes(&MOCK_MALFORMED_PACKET);
 
-    assert!(matches!(result, Err(ParserError::SegmentTooShort(19, 20))))
+    assert!(matches!(result, Err(ParserError::InvalidLength)))
 }

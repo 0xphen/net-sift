@@ -118,7 +118,7 @@ fn can_create_ipv4_without_options() {
         &DEFAULT_PAYLOAD,
     );
 
-    let ipv4 = Ipv4::new(&packets).unwrap();
+    let ipv4 = Ipv4::from_bytes(&packets).unwrap();
 
     let expected_packet = IPV4Values {
         expected_version: 8,
@@ -157,7 +157,7 @@ fn can_create_ipv4_with_options() {
         &DEFAULT_PAYLOAD,
     );
 
-    let ipv4 = Ipv4::new(&packets).unwrap();
+    let ipv4 = Ipv4::from_bytes(&packets).unwrap();
 
     let expected_packet = IPV4Values {
         expected_version: 8,
@@ -181,12 +181,9 @@ fn can_create_ipv4_with_options() {
 
 #[test]
 fn fails_if_packet_is_malformed() {
-    let result = Ipv4::new(&MOCK_MALFORMED_PACKET);
+    let result = Ipv4::from_bytes(&MOCK_MALFORMED_PACKET);
 
     let malformed_packet_size = MOCK_MALFORMED_PACKET.to_vec().len();
 
-    assert!(matches!(
-        result,
-        Err(ParserError::PacketTooShort(malformed_packet_size, 20))
-    ));
+    assert!(matches!(result, Err(ParserError::InvalidLength)))
 }

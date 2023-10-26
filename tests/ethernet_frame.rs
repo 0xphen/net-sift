@@ -79,7 +79,7 @@ fn can_create_ethernet_frame_without_qtag() {
         DEFAULT_FCS,
     );
 
-    let ethernet_frame = EthernetFrame::new(&frame).unwrap();
+    let ethernet_frame = EthernetFrame::from_bytes(&frame).unwrap();
 
     let expected_values = EthernetFrameValues {
         expected_mac_destination_string: "0C:19:3C:FF:58:0C",
@@ -106,7 +106,7 @@ fn can_create_ethernet_frame_with_qtag() {
         Some(DEFAULT_Q_TAG),
         DEFAULT_FCS,
     );
-    let ethernet_frame = EthernetFrame::new(&frame).unwrap();
+    let ethernet_frame = EthernetFrame::from_bytes(&frame).unwrap();
 
     let expected_values = EthernetFrameValues {
         expected_mac_destination_string: "0C:19:3C:FF:58:0C",
@@ -133,19 +133,13 @@ fn fails_if_bad_ether_type() {
         None,
         DEFAULT_FCS,
     );
-    let result = EthernetFrame::new(&frame);
+    let result = EthernetFrame::from_bytes(&frame);
 
     assert!(matches!(result, Err(ParserError::InvalidEtherType)))
 }
 
 #[test]
 fn fails_if_frame_is_malformed() {
-    let result = EthernetFrame::new(&MOCK_MALFORMED_ETHERNET_FRAME);
-
-    let malformed_frame_size = MOCK_MALFORMED_ETHERNET_FRAME.to_vec().len();
-
-    assert!(matches!(
-        result,
-        Err(ParserError::FrameTooShort(malformed_frame_size, 64))
-    ));
+    let result = EthernetFrame::from_bytes(&MOCK_MALFORMED_ETHERNET_FRAME);
+    assert!(matches!(result, Err(ParserError::InvalidLength)))
 }
