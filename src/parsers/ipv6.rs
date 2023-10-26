@@ -77,10 +77,10 @@ impl Ipv6 {
     /// - There's an inconsistency between the stated payload length
     ///  and the actual data available.
     // TODO: Optimise this function. Use of cursor and slice isn't efficient
-    pub fn new(packets: &[u8]) -> Result<Self, ParserError> {
+    pub fn from_bytes(packets: &[u8]) -> Result<Self, ParserError> {
         // Ensure packet is of minimum expected length.
         if packets.len() < MIN_PACKET_SIZE {
-            return Err(ParserError::PacketTooShort(packets.len(), MIN_PACKET_SIZE));
+            return Err(ParserError::InvalidLength);
         }
         let mut cursor = Cursor::new(packets);
 
@@ -216,7 +216,7 @@ impl Ipv6 {
     /// Returns `Ok([u16; 8])` representing the IPv6 address if the extraction succeeds.
     fn extract_ipv6_address(frame: &[u8], offset: usize) -> Result<[u16; 8], ParserError> {
         if frame.len() < offset + 16 {
-            return Err(ParserError::FrameTooShort(frame.len(), 16));
+            return Err(ParserError::InvalidLength);
         }
 
         // Extracting 16 bytes from the frame for the IPv6 address.

@@ -36,18 +36,12 @@ pub enum ParserError {
         source: std::io::Error,
     },
 
-    #[error("Packet too short got `{0}`, expected at least `{1}`")]
-    PacketTooShort(usize, usize),
-
-    #[error("Frame too short got `{0}`, expected at least `{1}`")]
-    FrameTooShort(usize, usize),
-
-    #[error("Segment too short got `{0}`, expected at least `{1}`")]
-    SegmentTooShort(usize, usize),
-
     #[error("Invalid IHL value got `{0}`, expected >=`{1}` or <= `{2}`")]
     InvalidIHLValue(u32, u8, u8),
 
     #[error("Invalid EtherType")]
     InvalidEtherType,
+
+    #[error("Invalid packet/segment length")]
+    InvalidLength,
 }

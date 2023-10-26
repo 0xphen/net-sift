@@ -93,14 +93,14 @@ fn addr(v: &[u8; 16]) -> Ipv6Addr {
 #[test]
 fn can_create_ipv6() {
     let packets = generate_mock_packet();
-    let ipv6 = Ipv6::new(&packets);
+    let ipv6 = Ipv6::from_bytes(&packets);
 
     validate_ipv6(ipv6.unwrap(), expected_ipv6())
 }
 
 #[test]
 fn fail_if_packet_is_too_short() {
-    let result = Ipv6::new(&MOCK_MALFORMED_PACKET);
+    let result = Ipv6::from_bytes(&MOCK_MALFORMED_PACKET);
 
-    assert!(matches!(result, Err(ParserError::PacketTooShort(19, 40))))
+    assert!(matches!(result, Err(ParserError::InvalidLength)))
 }

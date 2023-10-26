@@ -87,12 +87,9 @@ pub struct TCP {
 }
 
 impl TCP {
-    pub fn new(segments: &[u8]) -> Result<Self, ParserError> {
+    pub fn from_bytes(segments: &[u8]) -> Result<Self, ParserError> {
         if segments.len() < MIN_SEGMENT_SIZE {
-            return Err(ParserError::SegmentTooShort(
-                segments.len(),
-                MIN_SEGMENT_SIZE,
-            ));
+            return Err(ParserError::InvalidLength);
         }
         let mut cursor = Cursor::new(segments);
 
@@ -200,22 +197,17 @@ impl TCP {
         Ok((data_offset, reserved, flags, window))
     }
 
-    /// Extracts the TCP segment's checksum and urgent pointer from the given byte sequence.
-    ///
-    /// The function reads 4 bytes from the current position of the cursor:
-    /// - The first 2 bytes (upper 16 bits) represent the checksum.
-    /// - The next 2 bytes (lower 16 bits) represent the urgent pointer.
+    /// Extracts the TCP segment's checksum and, if applicable, the urgent pointer.
     ///
     /// # Arguments
     ///
-    /// * `cursor`: A mutable reference to a cursor over the slice of bytes. The cursor is expected
-    /// to be at the position where the checksum and urgent pointer are located in the TCP segment.
+    /// * `cursor` - A cursor over the TCP segment data.
+    /// * `urg` - A flag indicating whether the urgent pointer should be extracted.
     ///
     /// # Returns
     ///
-    /// This function returns a tuple of two `u16` values inside a `Result`:
-    /// - The first `u16` is the extracted checksum.
-    /// - The second `u16` is the extracted urgent pointer.
+    /// A result containing a tuple of the checksum and the urgent pointer,
+    /// the latter being present only if `urg` is true
     fn extract_tcp_checksum_urg_pointer(
         cursor: &mut Cursor<&[u8]>,
     ) -> Result<(u16, u16), ParserError> {
