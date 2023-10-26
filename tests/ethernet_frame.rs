@@ -141,8 +141,5 @@ fn fails_if_bad_ether_type() {
 #[test]
 fn fails_if_frame_is_malformed() {
     let result = EthernetFrame::from_bytes(&MOCK_MALFORMED_ETHERNET_FRAME);
-
-    let malformed_frame_size = MOCK_MALFORMED_ETHERNET_FRAME.to_vec().len();
-
     assert!(matches!(result, Err(ParserError::InvalidLength)))
 }
