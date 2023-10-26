@@ -5,7 +5,6 @@ This library offers an efficient and versatile protocol parser for network packe
 ## Supported Protocols:
 - :heavy_check_mark: supported.
 - 🏗️ under construction.
-- :x: not supported.
 
 | Protocol  | Supported        |
 | -------------- | ------------------ |
@@ -15,8 +14,7 @@ This library offers an efficient and versatile protocol parser for network packe
 | TCP (Transmission Control Protocol) |  :heavy_check_mark:         |
 | UDP (User Datagram Protocol) |  :heavy_check_mark:        
 | ICMP (Internet Control Message Protocol) |  🏗️          |
-|ARP (Address Resolution Protocol) |  :x:          |
-| HTTP/HTTPS (Hypertext Transfer Protocol/Secure) | :x:          |
+    
 
 ## Usage
 
