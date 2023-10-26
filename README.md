@@ -13,7 +13,7 @@ This library offers an efficient and versatile protocol parser for network packe
 | IPv4    | :heavy_check_mark:          |
 |IPv6 | :heavy_check_mark: |
 | TCP (Transmission Control Protocol) |  :heavy_check_mark:         |
-| UDP (User Datagram Protocol) | 🏗️        
+| UDP (User Datagram Protocol) |  :heavy_check_mark:        
 | ICMP (Internet Control Message Protocol) |  🏗️          |
 |ARP (Address Resolution Protocol) | :x:          |
 | HTTP/HTTPS (Hypertext Transfer Protocol/Secure) | :x:          |
