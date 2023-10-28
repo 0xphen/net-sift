@@ -141,7 +141,7 @@ fn can_create_ipv4_without_options() {
 }
 
 #[test]
-fn can_create_ipv4_with_options() {
+fn can_parse_ipv4_packet_with_options() {
     let packets = generate_mock_packet(
         DEFAULT_VERSION_IHL_WITH_OPTIONS,
         DEFAULT_TOS,

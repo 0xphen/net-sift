@@ -16,7 +16,7 @@ const MOCK_MALFORMED_PACKET: [u8; 19] = [
 fn generate_mock_segment(data_offset_reserved_flags_window: [u8; 4]) -> Vec<u8> {
     let v = u32::from_be_bytes(data_offset_reserved_flags_window);
     let l = v >> 28;
-    let cap: usize = ((l * 32 / 8) as usize + DEFAULT_DATA.len());
+    let cap: usize = (l * 32 / 8) as usize + DEFAULT_DATA.len();
 
     let mut segment: Vec<u8> = vec![0; cap];
 
@@ -92,7 +92,7 @@ fn validate_tcp(tcp: tcp::TcpSegment, expected_tcp: TcpValues) {
 // TEST
 
 #[test]
-fn can_create_tcp_without_options() {
+fn can_parse_tcp_packet_without_options() {
     let segment = generate_mock_segment(DEFAULT_ZERO_OPTIONS_DATA_OFFSET_RESERVED_FLAGS_WINDOW);
     let tcp = tcp::TcpSegment::from_bytes(&segment).unwrap();
     let data_offset =
@@ -102,7 +102,7 @@ fn can_create_tcp_without_options() {
 }
 
 #[test]
-fn can_create_tcp_with_options() {
+fn can_parse_tcp_packet_with_options() {
     let segment = generate_mock_segment(DEFAULT_OPTIONS_DATA_OFFSET_RESERVED_FLAGS_WINDOW);
     let tcp = tcp::TcpSegment::from_bytes(&segment).unwrap();
     let data_offset =

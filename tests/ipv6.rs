@@ -91,7 +91,7 @@ fn addr(v: &[u8; 16]) -> Ipv6Addr {
 // TESTS
 
 #[test]
-fn can_create_ipv6() {
+fn can_parse_ipv6_packet() {
     let packets = generate_mock_packet();
     let ipv6 = Ipv6Packet::from_bytes(&packets);
 
