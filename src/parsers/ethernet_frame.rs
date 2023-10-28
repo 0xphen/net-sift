@@ -18,7 +18,8 @@
 use super::{
     constants,
     errors::{ErrorSource, ParserError},
-    utils::read_arbitrary_length,
+    traits::Parser,
+    utils::{read_arbitrary_length, read_u16, read_u32},
 };
 
 use std::fmt;
@@ -168,7 +169,7 @@ impl EthernetFrame {
                 source: e,
             })?;
 
-        let q_tag_ether_bytes = Self::read_u32(&mut cursor, "QTAG_&_ETHERTYPE")?;
+        let q_tag_ether_bytes = read_u32(&mut cursor, "QTAG_&_ETHERTYPE")?;
 
         let (q_tag, ether_type) =
             Self::parse_vlan_tag_and_ether_type(&mut cursor, q_tag_ether_bytes)?;
@@ -215,7 +216,7 @@ impl EthernetFrame {
     ) -> Result<(Option<u32>, u16), ParserError> {
         let (q_tag, ether_type) = match q_tag_ether_bytes >> 16 {
             TPID_VLAN => {
-                let e_t = Self::read_u16(cursor, "Ether Type")?;
+                let e_t = read_u16(cursor, "Ether Type")?;
                 (Some(q_tag_ether_bytes & BITMASK_Q_TAG), e_t)
             }
             _ => {
@@ -265,51 +266,5 @@ impl EthernetFrame {
                 source: ErrorSource::TryFromSlice(e),
                 string: "Src/Dest MAC Address".to_string(),
             })
-    }
-
-    /// Reads a 128-bit unsigned integer from the current position of the cursor in big-endian format.
-    ///
-    /// # Arguments
-    ///
-    /// * `cursor` - A cursor over the byte slice from which the data will be read.
-    /// * `field` - A description of the data field, used for error messages.
-    ///
-    /// # Returns
-    ///
-    /// Returns a `Result` containing the `u128` value if successful, otherwise a `ParserError::ExtractionError`.
-    fn read_u32(cursor: &mut Cursor<&[u8]>, field: &str) -> Result<u32, ParserError> {
-        let mut buffer: [u8; 4] = Default::default();
-
-        cursor
-            .read_exact(&mut buffer)
-            .map_err(|e| ParserError::ExtractionError {
-                string: field.to_string(),
-                source: ErrorSource::Io(e),
-            })?;
-
-        Ok(u32::from_be_bytes(buffer))
-    }
-
-    /// Reads a 16-bit unsigned integer from the cursor's current position in big-endian format.
-    ///
-    /// # Arguments
-    ///
-    /// * `cursor` - A reference to the cursor in the byte slice being read.
-    /// * `field` - A descriptor for the data field, used in error messaging.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing the `u16` value if successful, or a `ParserError::ExtractionError` on failure.
-    fn read_u16(cursor: &mut Cursor<&[u8]>, field: &str) -> Result<u16, ParserError> {
-        let mut buffer: [u8; 2] = Default::default();
-
-        cursor
-            .read_exact(&mut buffer)
-            .map_err(|e| ParserError::ExtractionError {
-                string: field.to_string(),
-                source: ErrorSource::Io(e),
-            })?;
-
-        Ok(u16::from_be_bytes(buffer))
     }
 }
