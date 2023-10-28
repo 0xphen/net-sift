@@ -70,7 +70,7 @@ struct EthernetFrameValues {
 }
 
 #[test]
-fn can_create_ethernet_frame_without_qtag() {
+fn can_parse_ethernet_frame_without_qtag() {
     let frame = generate_mock_frame(
         DEFAULT_DEST_MAC,
         DEFAULT_SRC_MAC,
@@ -98,7 +98,7 @@ fn can_create_ethernet_frame_without_qtag() {
 }
 
 #[test]
-fn can_create_ethernet_frame_with_qtag() {
+fn can_parse_ethernet_frame_with_qtag() {
     let frame = generate_mock_frame(
         DEFAULT_DEST_MAC,
         DEFAULT_SRC_MAC,

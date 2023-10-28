@@ -42,7 +42,7 @@ impl IcmpPacket {
     /// # Returns:
     ///
     /// * `Result<Self, ParserError>` - An IcmpPacket instance or a ParserError.
-    pub fn new(packets: &[u8]) -> Result<Self, ParserError> {
+    pub fn from_bytes(packets: &[u8]) -> Result<Self, ParserError> {
         if packets.len() < DATA_OFFSET_OR_MIN_SIZE {
             return Err(ParserError::InvalidLength);
         }
