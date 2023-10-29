@@ -126,7 +126,7 @@ impl TcpSegment {
             }
         };
 
-        let data = read_arbitrary_length(&mut cursor, segments.len() - payload_offset, "Data")?;
+        let data = read_arbitrary_length(&mut cursor, segments.len() - payload_offset, "TCP_Data")?;
 
         Ok(TcpSegment {
             header: TcpSegmentHeader {

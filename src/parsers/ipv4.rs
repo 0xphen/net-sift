@@ -216,7 +216,7 @@ impl Ipv4Packet {
 
         let payload_size = total_length - (internet_header_length as u16 * 4);
 
-        payload = read_arbitrary_length(cursor, payload_size as usize, "Payload")?;
+        payload = read_arbitrary_length(cursor, payload_size as usize, "IPV4_Data")?;
 
         Ok((options, payload))
     }

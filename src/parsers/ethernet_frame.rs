@@ -168,7 +168,7 @@ impl EthernetFrame {
 
         let fcs_offset = frame.len() - 4;
         let data_size = fcs_offset as u64 - cursor.position();
-        let data = read_arbitrary_length(&mut cursor, data_size as usize, "Payload")?;
+        let data = read_arbitrary_length(&mut cursor, data_size as usize, "EtherFrame_Data")?;
 
         Ok(EthernetFrame {
             header: EthernetFrameHeader {

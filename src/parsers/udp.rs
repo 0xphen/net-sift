@@ -65,8 +65,11 @@ impl UdpDatagram {
         let (source_port, destination_port, length, checksum) =
             Self::extract_udp_header_fields(&mut cursor)?;
 
-        let data =
-            read_arbitrary_length(&mut cursor, packets.len() - DATA_OFFSET_OR_MIN_SIZE, "Data")?;
+        let data = read_arbitrary_length(
+            &mut cursor,
+            packets.len() - DATA_OFFSET_OR_MIN_SIZE,
+            "UDP_Data",
+        )?;
 
         Ok(UdpDatagram {
             header: UdpDatagramHeader {

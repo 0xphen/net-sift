@@ -58,8 +58,11 @@ impl IcmpPacket {
         let (icmp_type, icmp_code, checksum, rest_of_header) =
             Self::extract_icmp_header_fields(&mut cursor)?;
 
-        let data =
-            read_arbitrary_length(&mut cursor, packets.len() - DATA_OFFSET_OR_MIN_SIZE, "Data")?;
+        let data = read_arbitrary_length(
+            &mut cursor,
+            packets.len() - DATA_OFFSET_OR_MIN_SIZE,
+            "ICMP_Data",
+        )?;
 
         Ok(IcmpPacket {
             header: IcmpPacketHeader {

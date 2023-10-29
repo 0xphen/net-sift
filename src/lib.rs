@@ -1,5 +1,7 @@
 pub mod parsers;
 
+// use parsers::definitions::DeepParser;
+
 // #[cfg(test)]
 // mod test {
 //     use super::*;
@@ -165,10 +167,8 @@ pub mod parsers;
 //             107, 80, 181, 63, 47, 58, 20, 1, 97, 181, 162, 120, 40, 62, 201, 3, 161,
 //         ];
 
-//         let ether_frame = parsers::ethernet_frame::EthernetFrame::new(&frames);
-//         println!("Ethernet Frame: {:?}", ether_frame);
-
-//         let packet = parsers::ipv4::Ipv4::new(&packets);
-//         println!("Packet: {:?}", packet);
+//         let ether_frame = parsers::ethernet_frame::EthernetFrame::from_bytes(&frames).unwrap();
+//         let layered_data = ether_frame.parse_next_layer().unwrap();
+//         println!("Packet: {:?}", layered_data);
 //     }
 // }
