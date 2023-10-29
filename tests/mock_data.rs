@@ -55,7 +55,11 @@ pub fn generate_tcp_packets_with_options() -> Vec<u8> {
 }
 
 // IPV4 Packets
-pub const MIN_LENGTH: usize = 20;
+pub const ICMP: u8 = 1;
+pub const TCP: u8 = 6;
+pub const UDP: u8 = 17;
+
+pub const MIN_IPV4_LENGTH: usize = 20;
 pub const DEFAULT_VERSION_IHL_WITHOUT_OPTIONS: [u8; 1] = [133];
 pub const DEFAULT_VERSION_IHL_WITH_OPTIONS: [u8; 1] = [134];
 pub const DEFAULT_TOS: [u8; 1] = [15];
@@ -79,7 +83,7 @@ pub fn generate_ipv4_mock_packets(protocol: [u8; 1], options: Option<&[u8]>) -> 
         None => (DEFAULT_VERSION_IHL_WITHOUT_OPTIONS, 0),
     };
 
-    let total_length = MIN_LENGTH + payload.len() + options_size;
+    let total_length = MIN_IPV4_LENGTH + payload.len() + options_size;
 
     let mut packets: Vec<u8> = vec![0; total_length];
 
@@ -103,4 +107,32 @@ pub fn generate_ipv4_mock_packets(protocol: [u8; 1], options: Option<&[u8]>) -> 
     }
 
     packets
+}
+
+// IPV6 Packets
+pub const MIN_IPV6_LENGTH: usize = 40;
+pub const DEFAULT_VERSION_TRAFFIC_CLASS_FLOW_LABEL: [u8; 4] = [106, 122, 27, 255];
+pub const DEFAULT_PAYLOAD_LENGTH_NEXT_HEADER_HOP_LIMIT: [u8; 4] = [0, 10, 6, 100];
+pub const DEFAULT_SRC_ADDRESS: [u8; 16] = [
+    0, 0, 1, 123, 43, 12, 100, 255, 255, 255, 10, 21, 45, 12, 12, 12,
+];
+pub const DEFAULT_DEST_ADDRESS: [u8; 16] = [
+    10, 90, 1, 123, 43, 12, 100, 255, 255, 255, 255, 21, 45, 100, 12, 12,
+];
+
+pub fn generate_ipv6_mock_packet() -> Vec<u8> {
+    let payload = generate_tcp_packets_with_options();
+    let cap = MIN_IPV6_LENGTH + payload.len();
+    let mut packets: Vec<u8> = vec![0; cap];
+
+    packets[0..4].copy_from_slice(&DEFAULT_VERSION_TRAFFIC_CLASS_FLOW_LABEL);
+
+    packets[4..8].copy_from_slice(&DEFAULT_PAYLOAD_LENGTH_NEXT_HEADER_HOP_LIMIT);
+
+    packets[8..24].copy_from_slice(&DEFAULT_SRC_ADDRESS);
+    packets[24..40].copy_from_slice(&DEFAULT_DEST_ADDRESS);
+
+    packets[40..(40 + payload.len())].copy_from_slice(&payload);
+
+    return packets;
 }

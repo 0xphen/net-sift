@@ -5,9 +5,8 @@ use mock_data::{
     DEFAULT_TCP_PROTOCOL, MOCK_MALFORMED_PACKET,
 };
 use net_sift::parsers::{
-    definitions::{DeepParser, LayeredData},
+    definitions::{DeepParser, IPType, LayeredData},
     errors::ParserError,
-    ipv4::IPType,
     ipv4::Ipv4Packet,
 };
 
@@ -31,10 +30,6 @@ struct IPV4Values {
 }
 
 fn validate_ipv4(packet: Ipv4Packet, expected_packet: IPV4Values) {
-    println!(
-        "{:?} <=> {:?}",
-        packet.header.options, expected_packet.expected_options
-    );
     assert!(packet.header.version == expected_packet.expected_version);
     assert!(packet.header.internet_header_length == expected_packet.expected_ihl);
     assert!(packet.header.type_of_service == expected_packet.expected_type_of_service);

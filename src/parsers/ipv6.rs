@@ -22,8 +22,9 @@
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
 use super::{
+    definitions::{DeepParser, IPType, LayeredData},
     errors::{ErrorSource, ParserError},
-    utils::read_u32,
+    utils::{parse_ip_next_protocol_layer, read_u32},
 };
 
 use std::io::Cursor;
@@ -35,16 +36,21 @@ const PAYLOAD_OFFSET: usize = 40;
 const MIN_PACKET_SIZE: usize = 40;
 
 #[derive(Debug, PartialEq)]
-pub struct Ipv6Packet {
+pub struct Ipv6PacketHeader {
     pub version: u8,
     pub traffic_class: u8,
     pub flow_label: u32,
     pub payload_length: u16,
-    pub next_header: u8,
+    pub next_header: IPType,
     pub hop_limit: u8,
     pub source_address: Ipv6Addr,
     pub destination_address: Ipv6Addr,
-    pub payload: Vec<u8>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Ipv6Packet {
+    pub header: Ipv6PacketHeader,
+    pub data: Box<LayeredData>,
 }
 
 impl Ipv6Packet {
@@ -101,18 +107,20 @@ impl Ipv6Packet {
 
         // Extract the payload. It's the segment of the packet that follows the IPv6 header
         // and addresses, which contains the actual transmitted data.
-        let payload = (&packets[PAYLOAD_OFFSET..(packets.len())]).to_vec();
+        let data = (&packets[PAYLOAD_OFFSET..(packets.len())]).to_vec();
 
         Ok(Ipv6Packet {
-            version,
-            traffic_class,
-            flow_label,
-            payload_length,
-            next_header,
-            hop_limit,
-            source_address: Ipv6Addr::from(src_address_bytes),
-            destination_address: Ipv6Addr::from(dest_address_bytes),
-            payload,
+            header: Ipv6PacketHeader {
+                version,
+                traffic_class,
+                flow_label,
+                payload_length,
+                next_header: IPType::from(next_header),
+                hop_limit,
+                source_address: Ipv6Addr::from(src_address_bytes),
+                destination_address: Ipv6Addr::from(dest_address_bytes),
+            },
+            data: Box::new(LayeredData::Payload(data)),
         })
     }
 
@@ -235,5 +243,15 @@ impl Ipv6Packet {
         }
 
         Ok(address)
+    }
+}
+
+impl DeepParser for Ipv6Packet {
+    fn parse_next_layer(mut self) -> Result<LayeredData, ParserError> {
+        let layered_data: LayeredData =
+            parse_ip_next_protocol_layer(&*self.data, &self.header.next_header)?;
+
+        *self.data = layered_data;
+        Ok(LayeredData::Ipv6Data(self))
     }
 }

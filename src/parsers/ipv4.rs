@@ -16,12 +16,9 @@
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
 use super::{
-    definitions::{DeepParser, LayeredData},
-    errors::{ErrorSource, ParserError},
-    icmp::IcmpPacket,
-    tcp::TcpSegment,
-    udp::UdpDatagram,
-    utils::{read_arbitrary_length, read_u16, read_u32, read_u8},
+    definitions::{DeepParser, IPType, LayeredData},
+    errors::ParserError,
+    utils::{parse_ip_next_protocol_layer, read_arbitrary_length, read_u16, read_u32, read_u8},
 };
 
 use std::io::{Cursor, Read, Seek, SeekFrom};
@@ -34,25 +31,6 @@ const DEST_ADDRESS_OFFSET: usize = 16;
 const DEST_ADDRESS_LENGTH: usize = 4;
 
 const MIN_PACKET_SIZE: usize = 20;
-
-#[derive(Debug, PartialEq)]
-pub enum IPType {
-    TCP,
-    UDP,
-    ICMP,
-    Other(u8),
-}
-
-impl From<u8> for IPType {
-    fn from(byte: u8) -> IPType {
-        match byte {
-            1 => IPType::ICMP,
-            6 => IPType::TCP,
-            17 => IPType::UDP,
-            _ => IPType::Other(byte),
-        }
-    }
-}
 
 #[derive(Debug, PartialEq)]
 pub struct Ipv4PacketHeader {
@@ -284,36 +262,38 @@ impl Ipv4Packet {
 }
 
 impl DeepParser for Ipv4Packet {
-    /// Parses the payload of the IPv4 packet based on the protocol defined in its header.
+    /// Parses the payload based on the protocol specified in the IPv4 packet header.
     ///
-    /// This function determines the specific protocol being used (TCP, UDP, ICMP, etc.)
-    /// and processes the payload accordingly. If the protocol is unsupported, it returns an error.
+    /// This method inspects the current protocol layer, extracts its payload, and attempts
+    /// to parse that payload into a structured format suitable for further analysis or
+    /// processing. This process advances the analysis to the next protocol layer, if applicable.
+    ///
+    /// # Side Effects
+    /// * Alters the `data` field of the instance, replacing the original payload with the
+    ///   parsed data corresponding to the next protocol layer. The initial payload is not
+    ///   preserved after this transformation.
+    ///
+    /// # Behavior
+    /// * Identifies the protocol used within the packet's payload (e.g., TCP, UDP, ICMP).
+    /// * Initiates the appropriate parsing routine based on the identified protocol.
+    /// * Handles unsupported or unrecognized protocols by returning an error.
     ///
     /// # Returns
-    /// * `Ok(LayeredData)` containing the parsed data if the protocol is known and parsing is successful.
-    /// * `Err(ParserError)` either if the protocol is unknown or if there is an error during parsing.
+    /// * `Ok(LayeredData)` - If the payload is successfully parsed, encapsulating the results
+    ///   within a `LayeredData` enum for further manipulation or inspection.
+    /// * `Err(ParserError)` - If the payload's protocol is unrecognized or if any issues arise
+    ///   during the parsing phase, detailed within the `ParserError` enum.
+    ///
+    /// # Errors
+    /// The method may fail if:
+    /// * The protocol specified in the packet's header is unsupported or unknown.
+    /// * There are issues encountered during the parsing process, such as malformed data or
+    ///   unexpected input.
     fn parse_next_layer(mut self) -> Result<LayeredData, ParserError> {
-        if let LayeredData::Payload(data) = &*self.data {
-            let layered_data = match self.header.protocol {
-                IPType::TCP => {
-                    let tcp_packet = TcpSegment::from_bytes(data)?;
-                    tcp_packet.parse_next_layer()
-                }
-                IPType::UDP => {
-                    let udp_datagram = UdpDatagram::from_bytes(data)?;
-                    udp_datagram.parse_next_layer()
-                }
-                IPType::ICMP => {
-                    let icmp_packet = IcmpPacket::from_bytes(data)?;
-                    icmp_packet.parse_next_layer()
-                }
-                IPType::Other(v) => Err(ParserError::UnknownIPType(v)),
-            }?;
+        let layered_data: LayeredData =
+            parse_ip_next_protocol_layer(&*self.data, &self.header.protocol)?;
 
-            *self.data = layered_data;
-            Ok(LayeredData::Ipv4Data(self))
-        } else {
-            return Err(ParserError::InvalidPayload);
-        }
+        *self.data = layered_data;
+        Ok(LayeredData::Ipv4Data(self))
     }
 }
