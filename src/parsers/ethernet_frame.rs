@@ -71,39 +71,43 @@ const OFFSET_MAC_DEST: usize = 0;
 const OFFSET_MAC_SRC: usize = 6;
 
 #[derive(Debug, PartialEq)]
+/// Represents the header of an Ethernet frame.
+///
+/// Ethernet frames begin with a header that contains the essential fields
+/// for network communication. This struct captures the key components of
+/// that header, specifically catering to Ethernet II framing.
 pub struct EthernetFrameHeader {
-    pub mac_destination: MacAddress, // Destination MAC address
-    pub mac_source: MacAddress,      // Source MAC address
-    pub q_tag: Option<u32>,          // Optional Q-tag for VLAN-tagged frames
-    pub ether_type: EtherType,       // EtherType indicating the upper-layer protocol
+    /// The MAC (Media Access Control) address of the intended recipient of the packet.
+    pub mac_destination: MacAddress,
+
+    /// The MAC address of the sender of the packet.
+    pub mac_source: MacAddress,
+
+    /// An optional 802.1Q tag specifying VLAN membership and priority information.
+    /// It's present in VLAN-tagged frames, otherwise `None`.
+    pub q_tag: Option<u32>,
+
+    /// The EtherType field indicating the protocol encapsulated in the payload of the frame.
+    /// Common values indicate IPv4, IPv6, ARP, etc.
+    pub ether_type: EtherType,
 }
 
-/// An Ethernet frame representation.
+/// Represents a complete Ethernet frame.
 ///
-/// The `EthernetFrame` struct models the structure of an Ethernet II frame,
-/// which is the most commonly used Ethernet frame type. The Ethernet frame
-/// carries data internally for protocols such as IP and ARP.
-///
-/// An Ethernet frame comprises several fields including destination and
-/// source MAC addresses, an optional VLAN tag (Q-tag), an EtherType field
-/// indicating the upper-layer protocol, the payload, and a Frame Check Sequence (FCS).
-///
-/// # Fields
-///
-/// * `mac_destination`: The MAC address of the receiving device.
-/// * `mac_source`: The MAC address of the sending device.
-/// * `q_tag`: An optional Q-tag field used in VLANs. If the frame is VLAN-tagged,
-///   this field will include the Tag Protocol Identifier (TPID) and the Tag Control Information (TCI).
-/// * `ether_type`: A field that indicates the protocol of the encapsulated payload.
-///   For example, `0x0800` indicates IPv4.
-/// * `payload`: The encapsulated data within the Ethernet frame. Its content and interpretation
-///   are determined by the `ether_type`.
-/// Note: The Frame Check Sequence (FCS) is not represented here as
-/// it's used only for the frame's integrity check.
+/// This structure encompasses the entire Ethernet frame, providing access to
+/// both the header and the payload of the frame. It is fundamental for
+/// handling network data at a low level, allowing for the parsing, creation,
+/// and manipulation of Ethernet frames for various networking operations.
 #[derive(Debug, PartialEq)]
 pub struct EthernetFrame {
+    /// The header of the Ethernet frame, containing all the relevant
+    /// information for routing and type of content.
     pub header: EthernetFrameHeader,
-    pub data: Box<LayeredData>, // Frame's payload/data
+
+    /// The actual payload of the Ethernet frame encapsulated as `LayeredData`.
+    /// This can represent various forms of data as structured in different
+    /// network layers, depending on the EtherType specified in the header.
+    pub data: Box<LayeredData>,
 }
 
 impl EthernetFrame {
