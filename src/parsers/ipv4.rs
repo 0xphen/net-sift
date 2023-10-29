@@ -16,11 +16,12 @@
 // +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
 use super::{
-    errors::{ErrorSource, ParserError},
-    utils::read_arbitrary_length,
+    definitions::{DeepParser, IPType, LayeredData},
+    errors::ParserError,
+    utils::{parse_ip_next_protocol_layer, read_arbitrary_length, read_u16, read_u32, read_u8},
 };
 
-use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::io::{Cursor, Seek, SeekFrom};
 use std::net::Ipv4Addr;
 
 const MIN_IHL_VALUE: u8 = 5;
@@ -32,26 +33,7 @@ const DEST_ADDRESS_LENGTH: usize = 4;
 const MIN_PACKET_SIZE: usize = 20;
 
 #[derive(Debug, PartialEq)]
-pub enum IPType {
-    TCP,
-    UDP,
-    ICMP,
-    Other(u8),
-}
-
-impl From<u8> for IPType {
-    fn from(byte: u8) -> IPType {
-        match byte {
-            1 => IPType::ICMP,
-            6 => IPType::TCP,
-            17 => IPType::UDP,
-            _ => IPType::Other(byte),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Ipv4Packet {
+pub struct Ipv4PacketHeader {
     /// A single-byte field indicating the version of the IP protocol.
     /// For Ipv4, this is typically set to 4.
     pub version: u8,
@@ -99,9 +81,13 @@ pub struct Ipv4Packet {
     /// represented as a vector of bytes. This field is variable in length
     /// and may be absent.
     pub options: Option<Vec<u8>>,
+}
 
+#[derive(Debug, PartialEq)]
+pub struct Ipv4Packet {
+    pub header: Ipv4PacketHeader,
     /// A vector containing the payload or data portion of the IP packet.
-    pub payload: Vec<u8>,
+    pub data: Box<LayeredData>,
 }
 
 impl Ipv4Packet {
@@ -123,7 +109,7 @@ impl Ipv4Packet {
         }
         let mut cursor = Cursor::new(packets);
 
-        let version_ihl = Self::read_u8(&mut cursor, "Version & IHL")?;
+        let version_ihl = read_u8(&mut cursor, "Version & IHL")?;
 
         // Right shift the byte `version_ihl` 4 times to get the version
         // which is in the MSB.
@@ -139,49 +125,51 @@ impl Ipv4Packet {
             ));
         }
 
-        let type_of_service = Self::read_u8(&mut cursor, "ToS")?;
-        let total_length = Self::read_u16(&mut cursor, "Total Length")?;
+        let type_of_service = read_u8(&mut cursor, "ToS")?;
+        let total_length = read_u16(&mut cursor, "Total Length")?;
 
-        let identification = Self::read_u16(&mut cursor, "Identification")?;
+        let identification = read_u16(&mut cursor, "Identification")?;
 
-        let flags_fragment = Self::read_u16(&mut cursor, "Flags & Fragment")?;
+        let flags_fragment = read_u16(&mut cursor, "Flags & Fragment")?;
 
         // Right shift the byte `flags_fragment` 13 times to get the flags
         // which is in the MSB.
         let flags = (flags_fragment >> 13) as u8;
         let fragment_offset = flags_fragment & 8191;
 
-        let time_to_live = Self::read_u8(&mut cursor, "TTL")?;
-        let protocol = IPType::from(Self::read_u8(&mut cursor, "Protocol")?);
-        let header_checksum = Self::read_u16(&mut cursor, "Header Checksum")?;
+        let time_to_live = read_u8(&mut cursor, "TTL")?;
+        let protocol = IPType::from(read_u8(&mut cursor, "Protocol")?);
+        let header_checksum = read_u16(&mut cursor, "Header Checksum")?;
 
-        let [a, b, c, d] = u32::to_be_bytes(Self::read_u32(&mut cursor, "Source Address")?);
+        let [a, b, c, d] = u32::to_be_bytes(read_u32(&mut cursor, "Source Address")?);
         let source_address = Ipv4Addr::new(a, b, c, d);
 
-        let [a, b, c, d] = u32::to_be_bytes(Self::read_u32(&mut cursor, "Source Address")?);
+        let [a, b, c, d] = u32::to_be_bytes(read_u32(&mut cursor, "Source Address")?);
         let destination_address = Ipv4Addr::new(a, b, c, d);
 
-        let (options, payload) = Self::parse_options_and_payload(
+        let (options, data) = Self::parse_options_and_payload(
             &mut cursor,
             internet_header_length as u16,
             total_length,
         )?;
 
         Ok(Ipv4Packet {
-            version,
-            internet_header_length,
-            type_of_service,
-            total_length,
-            identification,
-            flags,
-            fragment_offset,
-            time_to_live,
-            protocol,
-            header_checksum,
-            source_address,
-            destination_address,
-            options,
-            payload,
+            header: Ipv4PacketHeader {
+                version,
+                internet_header_length,
+                type_of_service,
+                total_length,
+                identification,
+                flags,
+                fragment_offset,
+                time_to_live,
+                protocol,
+                header_checksum,
+                source_address,
+                destination_address,
+                options,
+            },
+            data: Box::new(LayeredData::Payload(data)),
         })
     }
 
@@ -233,69 +221,6 @@ impl Ipv4Packet {
         Ok((options, payload))
     }
 
-    /// Reads a single byte (`u8`) from the cursor's current position.
-    ///
-    /// # Arguments
-    /// - `cursor`: The cursor pointing to the data.
-    /// - `field`: The name of the field being read, for error context.
-    ///
-    /// # Returns
-    /// - `Result<u8, ParserError>`: The read byte or an error.
-    fn read_u8(cursor: &mut Cursor<&[u8]>, field: &str) -> Result<u8, ParserError> {
-        let mut buffer: [u8; 1] = Default::default();
-
-        cursor
-            .read_exact(&mut buffer)
-            .map_err(|e| ParserError::ExtractionError {
-                source: ErrorSource::Io(e),
-                string: field.to_string(),
-            })?;
-
-        Ok(u8::from_be_bytes(buffer))
-    }
-
-    /// Reads two bytes and converts them into a `u16` integer.
-    ///
-    /// # Arguments
-    /// - `cursor`: The cursor pointing to the data.
-    /// - `field`: The name of the field being read, for error context.
-    ///
-    /// # Returns
-    /// - `Result<u16, ParserError>`: The read `u16` integer or an error.
-    fn read_u16(cursor: &mut Cursor<&[u8]>, field: &str) -> Result<u16, ParserError> {
-        let mut buffer: [u8; 2] = Default::default();
-
-        cursor
-            .read_exact(&mut buffer)
-            .map_err(|e| ParserError::ExtractionError {
-                source: ErrorSource::Io(e),
-                string: field.to_string(),
-            })?;
-
-        Ok(u16::from_be_bytes(buffer))
-    }
-
-    /// Reads four bytes and converts them into a `u32` integer.
-    ///
-    /// # Arguments
-    /// - `cursor`: The cursor pointing to the data.
-    /// - `field`: The name of the field being read, for error context.
-    ///
-    /// # Returns
-    /// - `Result<u32, ParserError>`: The read `u32` integer or an error.
-    fn read_u32(cursor: &mut Cursor<&[u8]>, field: &str) -> Result<u32, ParserError> {
-        let mut buffer: [u8; 4] = Default::default();
-
-        cursor
-            .read_exact(&mut buffer)
-            .map_err(|e| ParserError::ExtractionError {
-                source: ErrorSource::Io(e),
-                string: field.to_string(),
-            })?;
-
-        Ok(u32::from_be_bytes(buffer))
-    }
-
     /// Calculate offsets and sizes for the optional "options" field and the "payload" data
     /// based on the Internet Header Length (IHL) field in the IPv4 header.
     ///
@@ -333,5 +258,42 @@ impl Ipv4Packet {
         // If IHL is 5 (no options), there are no "options" in the header
         // Set both options offset and options size to 0
         (0, 0, DEST_ADDRESS_OFFSET + DEST_ADDRESS_LENGTH)
+    }
+}
+
+impl DeepParser for Ipv4Packet {
+    /// Parses the payload based on the protocol specified in the IPv4 packet header.
+    ///
+    /// This method inspects the current protocol layer, extracts its payload, and attempts
+    /// to parse that payload into a structured format suitable for further analysis or
+    /// processing. This process advances the analysis to the next protocol layer, if applicable.
+    ///
+    /// # Side Effects
+    /// * Alters the `data` field of the instance, replacing the original payload with the
+    ///   parsed data corresponding to the next protocol layer. The initial payload is not
+    ///   preserved after this transformation.
+    ///
+    /// # Behavior
+    /// * Identifies the protocol used within the packet's payload (e.g., TCP, UDP, ICMP).
+    /// * Initiates the appropriate parsing routine based on the identified protocol.
+    /// * Handles unsupported or unrecognized protocols by returning an error.
+    ///
+    /// # Returns
+    /// * `Ok(LayeredData)` - If the payload is successfully parsed, encapsulating the results
+    ///   within a `LayeredData` enum for further manipulation or inspection.
+    /// * `Err(ParserError)` - If the payload's protocol is unrecognized or if any issues arise
+    ///   during the parsing phase, detailed within the `ParserError` enum.
+    ///
+    /// # Errors
+    /// The method may fail if:
+    /// * The protocol specified in the packet's header is unsupported or unknown.
+    /// * There are issues encountered during the parsing process, such as malformed data or
+    ///   unexpected input.
+    fn parse_next_layer(mut self) -> Result<LayeredData, ParserError> {
+        let layered_data: LayeredData =
+            parse_ip_next_protocol_layer(&*self.data, &self.header.protocol)?;
+
+        *self.data = layered_data;
+        Ok(LayeredData::Ipv4Data(self))
     }
 }

@@ -1,4 +1,3 @@
-pub mod aggregator;
 pub mod parsers;
 
 // #[cfg(test)]

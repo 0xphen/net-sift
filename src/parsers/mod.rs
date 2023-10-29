@@ -1,4 +1,5 @@
 pub mod constants;
+pub mod definitions;
 pub mod errors;
 pub mod ethernet_frame;
 pub mod icmp;

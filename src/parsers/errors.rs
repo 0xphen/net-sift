@@ -44,4 +44,13 @@ pub enum ParserError {
 
     #[error("Invalid packet/segment length")]
     InvalidLength,
+
+    #[error("Expected payload data")]
+    InvalidPayload,
+
+    #[error("Unknown IP type `{0}`")]
+    UnknownIPType(u8),
+
+    #[error("Unknown ether type type")]
+    UnSupportedEtherType,
 }

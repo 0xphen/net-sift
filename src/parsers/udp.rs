@@ -13,6 +13,7 @@
  */
 
 use super::{
+    definitions::{DeepParser, LayeredData},
     errors::ParserError,
     utils::{read_arbitrary_length, read_u64},
 };
@@ -22,12 +23,17 @@ use std::io::Cursor;
 const DATA_OFFSET_OR_MIN_SIZE: usize = 8;
 
 #[derive(Debug, PartialEq)]
-pub struct UdpDatagram {
+pub struct UdpDatagramHeader {
     pub source_port: u16,
     pub destination_port: u16,
     pub length: u16,
     pub checksum: u16,
-    pub data: Vec<u8>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct UdpDatagram {
+    pub header: UdpDatagramHeader,
+    pub data: Box<LayeredData>,
 }
 
 impl UdpDatagram {
@@ -63,11 +69,13 @@ impl UdpDatagram {
             read_arbitrary_length(&mut cursor, packets.len() - DATA_OFFSET_OR_MIN_SIZE, "Data")?;
 
         Ok(UdpDatagram {
-            source_port,
-            destination_port,
-            length,
-            checksum,
-            data,
+            header: UdpDatagramHeader {
+                source_port,
+                destination_port,
+                length,
+                checksum,
+            },
+            data: Box::new(LayeredData::Payload(data)),
         })
     }
 
@@ -102,5 +110,11 @@ impl UdpDatagram {
         let checksum = (bytes & 0xFFFF) as u16;
 
         Ok((src_port, dest_port, length, checksum))
+    }
+}
+
+impl DeepParser for UdpDatagram {
+    fn parse_next_layer(self) -> Result<LayeredData, ParserError> {
+        Ok(LayeredData::UdpData(self))
     }
 }
