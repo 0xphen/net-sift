@@ -30,12 +30,12 @@ pub struct IcmpPacketHeader {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct IcmpPacket<'a> {
+pub struct IcmpPacket {
     pub header: IcmpPacketHeader,
-    pub data: Box<LayeredData<'a>>,
+    pub data: Box<LayeredData>,
 }
 
-impl<'a> IcmpPacket<'a> {
+impl IcmpPacket {
     /// Constructs a new IcmpPacket from a slice of bytes.
     ///
     /// The function expects a byte slice representing a full ICMP packet and returns an
@@ -102,8 +102,8 @@ impl<'a> IcmpPacket<'a> {
     }
 }
 
-impl DeepParser for IcmpPacket<'_> {
-    fn parse_next_layer<'a>(&'a self) -> Result<LayeredData<'a>, ParserError> {
-        Ok(LayeredData::ICMP(self))
+impl DeepParser for IcmpPacket {
+    fn parse_next_layer(self) -> Result<LayeredData, ParserError> {
+        Ok(LayeredData::IcmpData(self))
     }
 }

@@ -82,3 +82,16 @@ pub fn read_u16(cursor: &mut Cursor<&[u8]>, field: &str) -> Result<u16, ParserEr
 
     Ok(u16::from_be_bytes(buffer))
 }
+
+pub fn read_u8(cursor: &mut Cursor<&[u8]>, field: &str) -> Result<u8, ParserError> {
+    let mut buffer: [u8; 1] = Default::default();
+
+    cursor
+        .read_exact(&mut buffer)
+        .map_err(|e| ParserError::ExtractionError {
+            source: ErrorSource::Io(e),
+            string: field.to_string(),
+        })?;
+
+    Ok(u8::from_be_bytes(buffer))
+}

@@ -87,12 +87,12 @@ pub struct TcpSegmentHeader {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct TcpSegment<'a> {
+pub struct TcpSegment {
     pub header: TcpSegmentHeader,
-    pub data: Box<LayeredData<'a>>,
+    pub data: Box<LayeredData>,
 }
 
-impl<'a> TcpSegment<'a> {
+impl TcpSegment {
     pub fn from_bytes(segments: &[u8]) -> Result<Self, ParserError> {
         if segments.len() < MIN_SEGMENT_SIZE {
             return Err(ParserError::InvalidLength);
@@ -231,8 +231,8 @@ impl<'a> TcpSegment<'a> {
     }
 }
 
-impl DeepParser for TcpSegment<'_> {
-    fn parse_next_layer<'a>(&'a self) -> Result<LayeredData<'a>, ParserError> {
-        Ok(LayeredData::TCP(self))
+impl DeepParser for TcpSegment {
+    fn parse_next_layer(self) -> Result<LayeredData, ParserError> {
+        Ok(LayeredData::TcpData(self))
     }
 }

@@ -31,12 +31,12 @@ pub struct UdpDatagramHeader {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct UdpDatagram<'a> {
+pub struct UdpDatagram {
     pub header: UdpDatagramHeader,
-    pub data: Box<LayeredData<'a>>,
+    pub data: Box<LayeredData>,
 }
 
-impl<'a> UdpDatagram<'a> {
+impl UdpDatagram {
     /// Parses the given UDP packet byte slice and constructs a `UDP` structure.
     ///
     /// This function will read the header fields such as source and destination ports,
@@ -113,8 +113,8 @@ impl<'a> UdpDatagram<'a> {
     }
 }
 
-impl DeepParser for UdpDatagram<'_> {
-    fn parse_next_layer<'a>(&'a self) -> Result<LayeredData<'a>, ParserError> {
-        Ok(LayeredData::UDP(self))
+impl DeepParser for UdpDatagram {
+    fn parse_next_layer(self) -> Result<LayeredData, ParserError> {
+        Ok(LayeredData::UdpData(self))
     }
 }
