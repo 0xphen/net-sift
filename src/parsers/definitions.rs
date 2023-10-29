@@ -1,6 +1,6 @@
 use super::{
-    errors::ParserError, icmp::IcmpPacket, ipv4::Ipv4Packet, ipv6::Ipv6Packet, tcp::TcpSegment,
-    udp::UdpDatagram,
+    errors::ParserError, ethernet_frame::EthernetFrame, icmp::IcmpPacket, ipv4::Ipv4Packet,
+    ipv6::Ipv6Packet, tcp::TcpSegment, udp::UdpDatagram,
 };
 
 #[derive(Debug, PartialEq)]
@@ -18,6 +18,25 @@ impl From<u8> for IPType {
             6 => IPType::TCP,
             17 => IPType::UDP,
             _ => IPType::Other(byte),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum EtherType {
+    IPv4,
+    IPv6,
+    ARP,
+    Other(u16),
+}
+
+impl From<u16> for EtherType {
+    fn from(raw: u16) -> Self {
+        match raw {
+            0x0800 => Self::IPv4,
+            0x86DD => Self::IPv6,
+            0x0806 => Self::ARP,
+            other => Self::Other(other),
         }
     }
 }
@@ -41,5 +60,6 @@ pub enum LayeredData {
     TcpData(TcpSegment),
     Ipv4Data(Ipv4Packet),
     Ipv6Data(Ipv6Packet),
+    EthernetFrameData(EthernetFrame),
     Empty,
 }

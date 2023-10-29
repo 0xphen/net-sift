@@ -1,10 +1,9 @@
-#[allow(dead_code)]
+#![allow(dead_code)]
+
 pub const ICMP_PACKETS: [u8; 12] = [8, 12, 94, 4, 0, 0, 0, 0, 12, 10, 0, 5];
 
-#[allow(dead_code)]
 pub const UDP_PACKETS: [u8; 14] = [12, 255, 100, 15, 0, 14, 8, 5, 7, 90, 100, 100, 255, 9];
 
-#[allow(dead_code)]
 pub const MOCK_MALFORMED_PACKET: [u8; 19] = [
     12, 25, 60, 255, 88, 12, 108, 100, 19, 25, 200, 199, 81, 0, 2, 22, 8, 0, 12,
 ];
@@ -135,4 +134,42 @@ pub fn generate_ipv6_mock_packet() -> Vec<u8> {
     packets[40..(40 + payload.len())].copy_from_slice(&payload);
 
     return packets;
+}
+
+// ETHERNETFRAME Packets
+pub const MIN_FRAME_SIZE_WITHOUT_QTAG: usize = 18;
+pub const MIN_FRAME_SIZE_WITH_QTAG: usize = 22;
+pub const DEFAULT_DEST_MAC: [u8; 6] = [12, 25, 60, 255, 88, 12];
+pub const DEFAULT_SRC_MAC: [u8; 6] = [108, 100, 19, 25, 200, 199];
+pub const DEFAULT_ETHER_TYPE: [u8; 2] = [134, 221];
+pub const INVALID_ETHER_TYPE: [u8; 2] = [99, 0];
+pub const DEFAULT_FCS: [u8; 4] = [1, 2, 3, 4];
+pub const DEFAULT_Q_TAG: [u8; 4] = [129, 0, 2, 22];
+
+pub fn generate_ethernet_mock_packets(q_tag: Option<[u8; 4]>, ether_type: [u8; 2]) -> Vec<u8> {
+    let (q_tag, q_tag_size, min_frame_size) = match q_tag {
+        Some(v) => (v.to_vec(), v.len(), MIN_FRAME_SIZE_WITH_QTAG),
+        None => (vec![], 0, MIN_FRAME_SIZE_WITHOUT_QTAG),
+    };
+
+    let payload = generate_ipv6_mock_packet();
+    let cap = min_frame_size + payload.len();
+
+    let mut frame = vec![0; cap];
+
+    frame[0..6].copy_from_slice(&DEFAULT_DEST_MAC);
+    frame[6..12].copy_from_slice(&DEFAULT_SRC_MAC);
+
+    if q_tag_size > 0 {
+        frame[12..16].copy_from_slice(&q_tag);
+        frame[16..18].copy_from_slice(&ether_type);
+        frame[18..(18 + payload.len())].copy_from_slice(&payload);
+    } else {
+        frame[12..14].copy_from_slice(&ether_type);
+        frame[14..(14 + payload.len())].copy_from_slice(&payload);
+    }
+
+    frame[(cap - 4)..cap].copy_from_slice(&DEFAULT_FCS);
+
+    frame
 }

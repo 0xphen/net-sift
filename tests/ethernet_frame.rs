@@ -1,62 +1,42 @@
-use net_sift::parsers::{
-    errors::ParserError,
-    ethernet_frame::{EtherType, EthernetFrame},
+mod mock_data;
+
+use mock_data::{
+    generate_ethernet_mock_packets, generate_ipv6_mock_packet, DEFAULT_DEST_MAC,
+    DEFAULT_ETHER_TYPE, DEFAULT_Q_TAG, DEFAULT_SRC_MAC, INVALID_ETHER_TYPE, MOCK_MALFORMED_PACKET,
 };
-
-const MOCK_MALFORMED_ETHERNET_FRAME: [u8; 28] = [
-    12, 25, 60, 255, 88, 12, 108, 100, 19, 25, 200, 199, 81, 0, 2, 22, 8, 0, 12, 16, 17, 2, 90, 20,
-    2, 22, 1, 8,
-];
-
-const DEFAULT_DEST_MAC: [u8; 6] = [12, 25, 60, 255, 88, 12];
-const DEFAULT_SRC_MAC: [u8; 6] = [108, 100, 19, 25, 200, 199];
-const DEFAULT_ETHER_TYPE: [u8; 2] = [134, 221];
-const INVALID_ETHER_TYPE: [u8; 2] = [99, 0];
-const DEFAULT_FCS: [u8; 4] = [1, 2, 3, 4];
-const DEFAULT_Q_TAG: [u8; 4] = [129, 0, 2, 22];
-
-fn generate_mock_frame(
-    dest_mac: [u8; 6],
-    src_mac: [u8; 6],
-    ether_type: [u8; 2],
-    q_tag: Option<[u8; 4]>,
-    fcs: [u8; 4],
-) -> [u8; 64] {
-    let mut frame = [0u8; 64];
-
-    frame[0..6].copy_from_slice(&dest_mac);
-    frame[6..12].copy_from_slice(&src_mac);
-    match q_tag {
-        Some(v) => {
-            frame[12..16].copy_from_slice(&v);
-            frame[16..18].copy_from_slice(&ether_type);
-        }
-        _ => frame[12..14].copy_from_slice(&ether_type),
-    }
-
-    frame[(64 - 4)..64].copy_from_slice(&fcs);
-    frame
-}
+use net_sift::parsers::{
+    definitions::{DeepParser, EtherType, LayeredData},
+    errors::ParserError,
+    ethernet_frame::EthernetFrame,
+};
 
 fn validate_ethernet_frame(frame: EthernetFrame, expected_values: &EthernetFrameValues) {
     assert_eq!(
-        frame.mac_destination.to_string(),
+        frame.header.mac_destination.to_string(),
         expected_values.expected_mac_destination_string
     );
     assert_eq!(
-        frame.mac_destination.0,
+        frame.header.mac_destination.0,
         expected_values.expected_mac_destination
     );
 
     assert_eq!(
-        frame.mac_source.to_string(),
+        frame.header.mac_source.to_string(),
         expected_values.expected_mac_source_string
     );
-    assert_eq!(frame.mac_source.0, expected_values.expected_mac_source);
+    assert_eq!(
+        frame.header.mac_source.0,
+        expected_values.expected_mac_source
+    );
 
-    assert_eq!(frame.ether_type, expected_values.expected_ether_type);
-    assert_eq!(frame.q_tag, expected_values.expected_q_tag);
-    assert_eq!(frame.payload, expected_values.expected_payload);
+    assert_eq!(frame.header.ether_type, expected_values.expected_ether_type);
+    assert_eq!(frame.header.q_tag, expected_values.expected_q_tag);
+    assert_eq!(
+        frame.data,
+        Box::new(LayeredData::Payload(
+            expected_values.expected_payload.to_vec()
+        ))
+    );
 }
 
 struct EthernetFrameValues {
@@ -66,18 +46,12 @@ struct EthernetFrameValues {
     expected_mac_source: [u8; 6],
     expected_ether_type: EtherType,
     expected_q_tag: Option<u32>,
-    expected_payload: &'static [u8],
+    expected_payload: Vec<u8>,
 }
 
 #[test]
 fn can_parse_ethernet_frame_without_qtag() {
-    let frame = generate_mock_frame(
-        DEFAULT_DEST_MAC,
-        DEFAULT_SRC_MAC,
-        DEFAULT_ETHER_TYPE,
-        None,
-        DEFAULT_FCS,
-    );
+    let frame = generate_ethernet_mock_packets(None, DEFAULT_ETHER_TYPE);
 
     let ethernet_frame = EthernetFrame::from_bytes(&frame).unwrap();
 
@@ -88,10 +62,7 @@ fn can_parse_ethernet_frame_without_qtag() {
         expected_mac_source: DEFAULT_SRC_MAC,
         expected_ether_type: EtherType::from(u16::from_be_bytes(DEFAULT_ETHER_TYPE)),
         expected_q_tag: None,
-        expected_payload: &[
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        ],
+        expected_payload: generate_ipv6_mock_packet(),
     };
 
     validate_ethernet_frame(ethernet_frame, &expected_values);
@@ -99,13 +70,8 @@ fn can_parse_ethernet_frame_without_qtag() {
 
 #[test]
 fn can_parse_ethernet_frame_with_qtag() {
-    let frame = generate_mock_frame(
-        DEFAULT_DEST_MAC,
-        DEFAULT_SRC_MAC,
-        DEFAULT_ETHER_TYPE,
-        Some(DEFAULT_Q_TAG),
-        DEFAULT_FCS,
-    );
+    let frame = generate_ethernet_mock_packets(Some(DEFAULT_Q_TAG), DEFAULT_ETHER_TYPE);
+
     let ethernet_frame = EthernetFrame::from_bytes(&frame).unwrap();
 
     let expected_values = EthernetFrameValues {
@@ -115,10 +81,7 @@ fn can_parse_ethernet_frame_with_qtag() {
         expected_mac_source: DEFAULT_SRC_MAC,
         expected_ether_type: EtherType::from(u16::from_be_bytes(DEFAULT_ETHER_TYPE)),
         expected_q_tag: Some(2164261398),
-        expected_payload: &[
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        ],
+        expected_payload: generate_ipv6_mock_packet(),
     };
 
     validate_ethernet_frame(ethernet_frame, &expected_values);
@@ -126,13 +89,8 @@ fn can_parse_ethernet_frame_with_qtag() {
 
 #[test]
 fn fails_if_bad_ether_type() {
-    let frame = generate_mock_frame(
-        DEFAULT_DEST_MAC,
-        DEFAULT_SRC_MAC,
-        INVALID_ETHER_TYPE,
-        None,
-        DEFAULT_FCS,
-    );
+    let frame = generate_ethernet_mock_packets(None, INVALID_ETHER_TYPE);
+
     let result = EthernetFrame::from_bytes(&frame);
 
     assert!(matches!(result, Err(ParserError::InvalidEtherType)))
@@ -140,6 +98,22 @@ fn fails_if_bad_ether_type() {
 
 #[test]
 fn fails_if_frame_is_malformed() {
-    let result = EthernetFrame::from_bytes(&MOCK_MALFORMED_ETHERNET_FRAME);
+    let result = EthernetFrame::from_bytes(&MOCK_MALFORMED_PACKET);
     assert!(matches!(result, Err(ParserError::InvalidLength)))
+}
+
+#[test]
+fn can_parse_layered_data() {
+    let frame = generate_ethernet_mock_packets(Some(DEFAULT_Q_TAG), DEFAULT_ETHER_TYPE);
+
+    let ethernet_frame = EthernetFrame::from_bytes(&frame).unwrap();
+    let layered_data = ethernet_frame.parse_next_layer().unwrap();
+
+    match layered_data {
+        LayeredData::EthernetFrameData(v) => match *v.data {
+            LayeredData::Ipv6Data(_) => {}
+            _ => panic!("Invalid nested layered data"),
+        },
+        _ => panic!("Invalid layered data"),
+    };
 }

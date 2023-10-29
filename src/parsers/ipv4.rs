@@ -21,7 +21,7 @@ use super::{
     utils::{parse_ip_next_protocol_layer, read_arbitrary_length, read_u16, read_u32, read_u8},
 };
 
-use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::io::{Cursor, Seek, SeekFrom};
 use std::net::Ipv4Addr;
 
 const MIN_IHL_VALUE: u8 = 5;

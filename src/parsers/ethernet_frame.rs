@@ -17,12 +17,15 @@
 
 use super::{
     constants,
+    definitions::{DeepParser, EtherType, LayeredData},
     errors::{ErrorSource, ParserError},
+    ipv4::Ipv4Packet,
+    ipv6::Ipv6Packet,
     utils::{read_arbitrary_length, read_u16, read_u32},
 };
 
 use std::fmt;
-use std::io::{Cursor, Read, Seek, SeekFrom};
+use std::io::{Cursor, Seek, SeekFrom};
 
 const MAC_ADDRESS_BYTES: usize = 6;
 
@@ -59,25 +62,6 @@ impl fmt::Display for MacAddress {
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub enum EtherType {
-    IPv4,
-    IPv6,
-    ARP,
-    Other(u16),
-}
-
-impl From<u16> for EtherType {
-    fn from(raw: u16) -> Self {
-        match raw {
-            0x0800 => Self::IPv4,
-            0x86DD => Self::IPv6,
-            0x0806 => Self::ARP,
-            other => Self::Other(other),
-        }
-    }
-}
-
 // Constants representing various parameters and offsets within an Ethernet frame.
 // These are used for parsing the frame correctly.
 const TPID_VLAN: u32 = 33024; // [0x81, 0x00];
@@ -85,6 +69,14 @@ const Q_TAG_OR_ETHER_TYPE_OFFSET: u64 = 12;
 const BITMASK_Q_TAG: u32 = 0xFFFFFFFF;
 const OFFSET_MAC_DEST: usize = 0;
 const OFFSET_MAC_SRC: usize = 6;
+
+#[derive(Debug, PartialEq)]
+pub struct EthernetFrameHeader {
+    pub mac_destination: MacAddress, // Destination MAC address
+    pub mac_source: MacAddress,      // Source MAC address
+    pub q_tag: Option<u32>,          // Optional Q-tag for VLAN-tagged frames
+    pub ether_type: EtherType,       // EtherType indicating the upper-layer protocol
+}
 
 /// An Ethernet frame representation.
 ///
@@ -110,11 +102,8 @@ const OFFSET_MAC_SRC: usize = 6;
 /// it's used only for the frame's integrity check.
 #[derive(Debug, PartialEq)]
 pub struct EthernetFrame {
-    pub mac_destination: MacAddress, // Destination MAC address
-    pub mac_source: MacAddress,      // Source MAC address
-    pub q_tag: Option<u32>,          // Optional Q-tag for VLAN-tagged frames
-    pub ether_type: EtherType,       // EtherType indicating the upper-layer protocol
-    pub payload: Vec<u8>,            // Frame's payload/data
+    pub header: EthernetFrameHeader,
+    pub data: Box<LayeredData>, // Frame's payload/data
 }
 
 impl EthernetFrame {
@@ -174,15 +163,17 @@ impl EthernetFrame {
             Self::parse_vlan_tag_and_ether_type(&mut cursor, q_tag_ether_bytes)?;
 
         let fcs_offset = frame.len() - 4;
-        let payload_size = fcs_offset as u64 - cursor.position();
-        let payload = read_arbitrary_length(&mut cursor, payload_size as usize, "Payload")?;
+        let data_size = fcs_offset as u64 - cursor.position();
+        let data = read_arbitrary_length(&mut cursor, data_size as usize, "Payload")?;
 
         Ok(EthernetFrame {
-            mac_destination: MacAddress::from_bytes(mac_destination_bytes),
-            mac_source: MacAddress::from_bytes(mac_source_bytes),
-            q_tag,
-            ether_type: EtherType::from(ether_type),
-            payload,
+            header: EthernetFrameHeader {
+                mac_destination: MacAddress::from_bytes(mac_destination_bytes),
+                mac_source: MacAddress::from_bytes(mac_source_bytes),
+                q_tag,
+                ether_type: EtherType::from(ether_type),
+            },
+            data: Box::new(LayeredData::Payload(data)),
         })
     }
 
@@ -265,5 +256,29 @@ impl EthernetFrame {
                 source: ErrorSource::TryFromSlice(e),
                 string: "Src/Dest MAC Address".to_string(),
             })
+    }
+}
+
+impl DeepParser for EthernetFrame {
+    fn parse_next_layer(mut self) -> Result<LayeredData, ParserError> {
+        let data = match &*self.data {
+            LayeredData::Payload(data) => data,
+            _ => return Err(ParserError::InvalidPayload),
+        };
+
+        let layered_data = match self.header.ether_type {
+            EtherType::IPv4 => {
+                let ipv4_packet = Ipv4Packet::from_bytes(data)?;
+                ipv4_packet.parse_next_layer()?
+            }
+            EtherType::IPv6 => {
+                let ipv6_packet = Ipv6Packet::from_bytes(data)?;
+                ipv6_packet.parse_next_layer()?
+            }
+            _ => return Err(ParserError::UnSupportedEtherType),
+        };
+
+        *self.data = layered_data;
+        Ok(LayeredData::EthernetFrameData(self))
     }
 }

@@ -50,4 +50,7 @@ pub enum ParserError {
 
     #[error("Unknown IP type `{0}`")]
     UnknownIPType(u8),
+
+    #[error("Unknown ether type type")]
+    UnSupportedEtherType,
 }
