@@ -32,7 +32,7 @@ pub struct IcmpPacketHeader {
 #[derive(Debug, PartialEq)]
 pub struct IcmpPacket<'a> {
     pub header: IcmpPacketHeader,
-    pub data: Box<LayeredData<'a>>, // Payload or message associated with the ICMP packet.
+    pub data: Box<LayeredData<'a>>,
 }
 
 impl<'a> IcmpPacket<'a> {
