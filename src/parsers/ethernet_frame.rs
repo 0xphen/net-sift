@@ -18,7 +18,6 @@
 use super::{
     constants,
     errors::{ErrorSource, ParserError},
-    traits::Parser,
     utils::{read_arbitrary_length, read_u16, read_u32},
 };
 

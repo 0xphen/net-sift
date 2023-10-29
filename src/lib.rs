@@ -1,4 +1,3 @@
-pub mod deep_parse;
 pub mod parsers;
 
 // #[cfg(test)]

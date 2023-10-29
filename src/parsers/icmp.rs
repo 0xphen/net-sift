@@ -12,6 +12,7 @@
  */
 
 use super::{
+    definitions::{DeepParser, LayeredData},
     errors::ParserError,
     utils::{read_arbitrary_length, read_u64},
 };
@@ -21,15 +22,20 @@ use std::io::Cursor;
 const DATA_OFFSET_OR_MIN_SIZE: usize = 8;
 
 #[derive(Debug, PartialEq)]
-pub struct IcmpPacket {
+pub struct IcmpPacketHeader {
     pub icmp_type: u8,       // Type of ICMP message.
     pub icmp_code: u8,       // Subtype to further specify the message.
     pub checksum: u16,       // Error-checking data calculated from the ICMP message.
     pub rest_of_header: u32, // Remaining data in the header (depends on type and code).
-    pub data: Vec<u8>,       // Payload or message associated with the ICMP packet.
 }
 
-impl IcmpPacket {
+#[derive(Debug, PartialEq)]
+pub struct IcmpPacket<'a> {
+    pub header: IcmpPacketHeader,
+    pub data: Box<LayeredData<'a>>, // Payload or message associated with the ICMP packet.
+}
+
+impl<'a> IcmpPacket<'a> {
     /// Constructs a new IcmpPacket from a slice of bytes.
     ///
     /// The function expects a byte slice representing a full ICMP packet and returns an
@@ -56,11 +62,13 @@ impl IcmpPacket {
             read_arbitrary_length(&mut cursor, packets.len() - DATA_OFFSET_OR_MIN_SIZE, "Data")?;
 
         Ok(IcmpPacket {
-            icmp_type,
-            icmp_code,
-            checksum,
-            rest_of_header,
-            data,
+            header: IcmpPacketHeader {
+                icmp_type,
+                icmp_code,
+                checksum,
+                rest_of_header,
+            },
+            data: Box::new(LayeredData::Payload(data)),
         })
     }
 
@@ -91,5 +99,11 @@ impl IcmpPacket {
         let rest_of_header = (bytes & 0xFFFFFFFF) as u32;
 
         Ok((icmp_type, icmp_code, checksum, rest_of_header))
+    }
+}
+
+impl DeepParser for IcmpPacket<'_> {
+    fn parse_next_layer<'a>(&'a self) -> Result<LayeredData<'a>, ParserError> {
+        Ok(LayeredData::ICMP(self))
     }
 }
