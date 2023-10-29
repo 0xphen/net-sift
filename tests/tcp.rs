@@ -1,4 +1,6 @@
-use net_sift::parsers::{errors::ParserError, tcp};
+use net_sift::parsers::{
+    definitions::DeepParser, definitions::LayeredData, errors::ParserError, tcp,
+};
 
 const DEFAULT_SRC_DEST_PORT: [u8; 4] = [207, 153, 0, 80];
 const DEFAULT_SEQUENCE_NUMBER: [u8; 4] = [0, 0, 3, 232];
@@ -50,20 +52,23 @@ struct TcpValues {
     expected_data: Vec<u8>,
 }
 
-impl From<TcpValues> for tcp::TcpSegment {
-    fn from(value: TcpValues) -> tcp::TcpSegment {
+impl<'a> From<TcpValues> for tcp::TcpSegment<'a> {
+    fn from(value: TcpValues) -> tcp::TcpSegment<'a> {
         tcp::TcpSegment {
-            source_port: value.expected_src_port,
-            destination_port: value.expected_dest_port,
-            sequence_number: value.expected_seq_number,
-            acknowledgment_value: value.expected_ack_number,
-            data_offset: value.expected_data_offset,
-            reserved: value.expected_reserved,
-            flags: value.expected_flags,
-            window_size: value.expected_window_size,
-            checksum: value.expected_checksum,
-            urg_pointer: value.expected_urg_pointer,
-            data: value.expected_data,
+            header: tcp::TcpSegmentHeader {
+                source_port: value.expected_src_port,
+                destination_port: value.expected_dest_port,
+                sequence_number: value.expected_seq_number,
+                acknowledgment_value: value.expected_ack_number,
+                data_offset: value.expected_data_offset,
+                reserved: value.expected_reserved,
+                flags: value.expected_flags,
+                window_size: value.expected_window_size,
+                checksum: value.expected_checksum,
+                urg_pointer: value.expected_urg_pointer,
+            },
+
+            data: Box::new(LayeredData::Payload(value.expected_data)),
         }
     }
 }
@@ -94,21 +99,21 @@ fn validate_tcp(tcp: tcp::TcpSegment, expected_tcp: TcpValues) {
 #[test]
 fn can_parse_tcp_packet_without_options() {
     let segment = generate_mock_segment(DEFAULT_ZERO_OPTIONS_DATA_OFFSET_RESERVED_FLAGS_WINDOW);
-    let tcp = tcp::TcpSegment::from_bytes(&segment).unwrap();
+    let tcp_segment = tcp::TcpSegment::from_bytes(&segment).unwrap();
     let data_offset =
         (u32::from_be_bytes(DEFAULT_ZERO_OPTIONS_DATA_OFFSET_RESERVED_FLAGS_WINDOW) >> 28) as u8;
 
-    validate_tcp(tcp, expected_tcp_values(data_offset));
+    validate_tcp(tcp_segment, expected_tcp_values(data_offset));
 }
 
 #[test]
 fn can_parse_tcp_packet_with_options() {
     let segment = generate_mock_segment(DEFAULT_OPTIONS_DATA_OFFSET_RESERVED_FLAGS_WINDOW);
-    let tcp = tcp::TcpSegment::from_bytes(&segment).unwrap();
+    let tcp_segment = tcp::TcpSegment::from_bytes(&segment).unwrap();
     let data_offset =
         (u32::from_be_bytes(DEFAULT_OPTIONS_DATA_OFFSET_RESERVED_FLAGS_WINDOW) >> 28) as u8;
 
-    validate_tcp(tcp, expected_tcp_values(data_offset));
+    validate_tcp(tcp_segment, expected_tcp_values(data_offset));
 }
 
 #[test]
@@ -116,4 +121,14 @@ fn fail_if_segment_is_too_short() {
     let result = tcp::TcpSegment::from_bytes(&MOCK_MALFORMED_PACKET);
 
     assert!(matches!(result, Err(ParserError::InvalidLength)))
+}
+
+#[test]
+fn can_parse_layered_data() {
+    let segment = generate_mock_segment(DEFAULT_OPTIONS_DATA_OFFSET_RESERVED_FLAGS_WINDOW);
+    let tcp_segment = tcp::TcpSegment::from_bytes(&segment).unwrap();
+
+    let layered_data = tcp_segment.parse_next_layer().unwrap();
+
+    assert_eq!(layered_data, LayeredData::TCP(&tcp_segment));
 }

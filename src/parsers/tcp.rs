@@ -22,6 +22,7 @@
  */
 
 use super::{
+    definitions::{DeepParser, LayeredData},
     errors::ParserError,
     utils::{read_arbitrary_length, read_u32},
 };
@@ -72,7 +73,7 @@ const MIN_SEGMENT_SIZE: usize = 20;
 const OPTIONS_OFFSET: usize = 20;
 
 #[derive(Debug, PartialEq)]
-pub struct TcpSegment {
+pub struct TcpSegmentHeader {
     pub source_port: u16,
     pub destination_port: u16,
     pub sequence_number: u32,
@@ -83,10 +84,15 @@ pub struct TcpSegment {
     pub window_size: u16,
     pub checksum: u16,
     pub urg_pointer: u16,
-    pub data: Vec<u8>,
 }
 
-impl TcpSegment {
+#[derive(Debug, PartialEq)]
+pub struct TcpSegment<'a> {
+    pub header: TcpSegmentHeader,
+    pub data: Box<LayeredData<'a>>,
+}
+
+impl<'a> TcpSegment<'a> {
     pub fn from_bytes(segments: &[u8]) -> Result<Self, ParserError> {
         if segments.len() < MIN_SEGMENT_SIZE {
             return Err(ParserError::InvalidLength);
@@ -123,17 +129,20 @@ impl TcpSegment {
         let data = read_arbitrary_length(&mut cursor, segments.len() - payload_offset, "Data")?;
 
         Ok(TcpSegment {
-            source_port,
-            destination_port,
-            sequence_number,
-            acknowledgment_value,
-            data_offset,
-            reserved,
-            flags,
-            window_size,
-            checksum,
-            urg_pointer,
-            data,
+            header: TcpSegmentHeader {
+                source_port,
+                destination_port,
+                sequence_number,
+                acknowledgment_value,
+                data_offset,
+                reserved,
+                flags,
+                window_size,
+                checksum,
+                urg_pointer,
+            },
+
+            data: Box::new(LayeredData::Payload(data)),
         })
     }
 
@@ -219,5 +228,11 @@ impl TcpSegment {
         let urg_pointer = (bytes & 0xFFFF) as u16;
 
         Ok((checksum, urg_pointer))
+    }
+}
+
+impl DeepParser for TcpSegment<'_> {
+    fn parse_next_layer<'a>(&'a self) -> Result<LayeredData<'a>, ParserError> {
+        Ok(LayeredData::TCP(self))
     }
 }

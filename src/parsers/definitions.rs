@@ -1,4 +1,4 @@
-use super::{errors::ParserError, icmp::IcmpPacket, udp::UdpDatagram};
+use super::{errors::ParserError, icmp::IcmpPacket, tcp::TcpSegment, udp::UdpDatagram};
 
 pub trait DeepParser {
     fn parse_next_layer<'a>(&'a self) -> Result<LayeredData<'a>, ParserError>;
@@ -9,5 +9,6 @@ pub enum LayeredData<'a> {
     Payload(Vec<u8>),
     ICMP(&'a IcmpPacket<'a>),
     UDP(&'a UdpDatagram<'a>),
+    TCP(&'a TcpSegment<'a>),
     Empty,
 }
