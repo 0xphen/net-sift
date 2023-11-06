@@ -25,7 +25,7 @@ use super::{
 };
 
 use std::fmt;
-use std::io::{Cursor, Seek, SeekFrom};
+use std::io::Cursor;
 
 const MAC_ADDRESS_BYTES: usize = 6;
 
