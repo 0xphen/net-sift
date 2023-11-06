@@ -1,6 +1,6 @@
 # net-sift
 
-This library offers an efficient and versatile protocol parser for network packets, featuring an almost dependency-free architecture. It provides support for a range of key network protocols such as IPv4, IPv6, Ethernet frames, UDP, TCP, ARP, and more. The development efforts are primarily concentrated on the most prevalent protocols within the internet and transport layers.
+This library offers an efficient and adaptable network packet parser, with a minimal reliance on external dependencies. It is designed to parse and verify an extensive array of essential network protocols, including ethernet frames, IPv4, IPv6, UDP, TCP, among others. The focus of development is centered on the dominant protocols found in the internet and transport layers.
 
 ## Supported Protocols:
 - :heavy_check_mark: supported.
@@ -14,7 +14,77 @@ This library offers an efficient and versatile protocol parser for network packe
 | TCP (Transmission Control Protocol) |  :heavy_check_mark:         |
 | UDP (User Datagram Protocol) |  :heavy_check_mark:        
 | ICMP (Internet Control Message Protocol) |  :heavy_check_mark:           |
-    
+
+## Building
+To install the latest version of `net-sift`, ensure you have [Rust toolchain installed](https://rustup.rs/), then run:
+```
+cargo install net-sift
+```
+Or, to build from source (binary in `target/release/net-sift`):
+```
+cargo build --release
+```
 
 ## Usage
+Net-sift supports both shallow packet parsing (decoding standalone network protocols), and deep packet inspection (parsing and decoding layered network hierarchies).
+
+### Shallow Packet Parsing
+Net-sift provides shallow packet parsing, by decoding the basic structure of network protocols; it dissects packets to reveal fundamental fields. This parsing is limited to the immediate protocol layer without delving into nested protocols. Net-sift's parsing capability is suitable for applications needing quick access to outer packet information.
+
+##### Example parsing an ethernet frame
+```rust
+use net_sift::parsers::{ethernet_frame::EthernetFrame, errors::ParserError};
+
+// A function that attempts to parse an Ethernet frame from a slice of bytes.
+fn shallow_parse_ether_frame(packet_data: &[u8]) -> Result<EthernetFrame, ParserError> {
+    EthernetFrame::from_bytes(packet_data)
+}
+
+fn main() {
+    // Sample raw Ethernet frame data
+    let raw_data: Vec<u8> = vec![
+        // Your raw Ethernet frame bytes here
+    ];
+
+    // Attempt to parse the raw data as an Ethernet frame
+    match shallow_parse_ether_frame(&raw_data) {
+        Ok(frame) => println!("Parsed Ethernet Frame: {:?}", frame),
+        Err(e) => eprintln!("Failed to parse Ethernet Frame: {:?}", e),
+    }
+}
+
+```
+
+### Deep Packet Inspection
+Net-sift extends its parsing capabilities to deep packet inspection, meticulously analyzing embedded network layers within a packet. It interprets not just the Ethernet frame but also examines encapsulated protocols like IPv4, IPv6, TCP, and UDP. This thorough analysis aids in a comprehensive understanding of the packet's journey and its various interactions across network boundaries, making it ideal for in-depth network analysis and troubleshooting.
+
+##### Example parsing an ethernet frame
+
+```rust
+use net_sift::parsers::{ethernet_frame::EthernetFrame, errors::ParserError, definitions::{DeepParser, LayeredData}};
+
+// A function that attempts to parse an Ethernet frame and all embedded packets
+fn deep_parse_ether_frame(packet_data: &[u8]) -> Result<LayeredData, ParserError> {
+    let ether_frame = EthernetFrame::from_bytes(packet_data)?;
+    ether_frame.parse_next_layer()
+}
+
+fn main() {
+    // Sample raw Ethernet frame data
+    let raw_data: Vec<u8> = vec![
+        // Example bytes of an Ethernet frame
+    ];
+
+    // Attempt to recursively parse all layered protocols
+    match deep_parse_ether_frame(&raw_data) {
+        Ok(layered_data) => {
+            println!("Parsed Layered Data: {:?}", layered_data);
+        },
+        Err(e) => {
+            eprintln!("Failed to parse the Ethernet Frame and embedded layers: {:?}", e);
+        },
+    }
+}
+
+```
 
