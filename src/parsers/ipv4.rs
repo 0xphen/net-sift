@@ -127,9 +127,7 @@ impl Ipv4Packet {
 
         let type_of_service = read_u8(&mut cursor, "ToS")?;
         let total_length = read_u16(&mut cursor, "Total Length")?;
-
         let identification = read_u16(&mut cursor, "Identification")?;
-
         let flags_fragment = read_u16(&mut cursor, "Flags & Fragment")?;
 
         // Right shift the byte `flags_fragment` 13 times to get the flags

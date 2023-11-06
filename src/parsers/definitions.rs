@@ -1,4 +1,3 @@
-// Main module imports necessary for parsing operations.
 use super::{
     errors::ParserError, ethernet_frame::EthernetFrame, icmp::IcmpPacket, ipv4::Ipv4Packet,
     ipv6::Ipv6Packet, tcp::TcpSegment, udp::UdpDatagram,

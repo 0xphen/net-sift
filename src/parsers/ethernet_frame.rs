@@ -18,10 +18,10 @@
 use super::{
     constants,
     definitions::{DeepParser, EtherType, LayeredData},
-    errors::{ErrorSource, ParserError},
+    errors::ParserError,
     ipv4::Ipv4Packet,
     ipv6::Ipv6Packet,
-    utils::{read_arbitrary_length, read_u16, read_u32},
+    utils::{read_arbitrary_length, read_u128, read_u16, read_u32},
 };
 
 use std::fmt;
@@ -65,10 +65,6 @@ impl fmt::Display for MacAddress {
 // Constants representing various parameters and offsets within an Ethernet frame.
 // These are used for parsing the frame correctly.
 const TPID_VLAN: u32 = 33024; // [0x81, 0x00];
-const Q_TAG_OR_ETHER_TYPE_OFFSET: u64 = 12;
-const BITMASK_Q_TAG: u32 = 0xFFFFFFFF;
-const OFFSET_MAC_DEST: usize = 0;
-const OFFSET_MAC_SRC: usize = 6;
 
 #[derive(Debug, PartialEq)]
 /// Represents the header of an Ethernet frame.
@@ -145,79 +141,63 @@ impl EthernetFrame {
         if frame.len() < constants::MIN_FRAME_SIZE {
             return Err(ParserError::InvalidLength);
         }
-
-        let mac_destination_bytes: [u8; 6] =
-            EthernetFrame::extract_mac_address(&frame, OFFSET_MAC_DEST)?;
-
-        let mac_source_bytes: [u8; 6] = Self::extract_mac_address(&frame, OFFSET_MAC_SRC)?;
-
         let mut cursor: Cursor<&[u8]> = Cursor::new(frame);
-        // Since we already extracted the MAC addresses, we move the cursor
-        // to the next index after the MAC addresses.
-        cursor
-            .seek(SeekFrom::Start(Q_TAG_OR_ETHER_TYPE_OFFSET))
-            .map_err(|e| ParserError::CursorError {
-                string: "Options".to_string(),
-                source: e,
-            })?;
 
-        let q_tag_ether_bytes = read_u32(&mut cursor, "QTAG_&_ETHERTYPE")?;
+        let (mac_destination, mac_source, q_tag, ether_type) = Self::extract_header(&mut cursor)?;
 
-        let (q_tag, ether_type) =
-            Self::parse_vlan_tag_and_ether_type(&mut cursor, q_tag_ether_bytes)?;
-
-        let fcs_offset = frame.len() - 4;
-        let data_size = fcs_offset as u64 - cursor.position();
-        let data = read_arbitrary_length(&mut cursor, data_size as usize, "EtherFrame_Data")?;
+        let data = read_arbitrary_length(
+            &mut cursor,
+            Self::data_size(frame.len(), q_tag),
+            "EtherFrame_Data",
+        )?;
 
         Ok(EthernetFrame {
             header: EthernetFrameHeader {
-                mac_destination: MacAddress::from_bytes(mac_destination_bytes),
-                mac_source: MacAddress::from_bytes(mac_source_bytes),
+                mac_destination,
+                mac_source,
                 q_tag,
-                ether_type: EtherType::from(ether_type),
+                ether_type,
             },
             data: Box::new(LayeredData::Payload(data)),
         })
     }
 
-    /// Parses the VLAN tag (if present) and the EtherType from a segment of network packet data.
+    /// Extracts the Ethernet frame header from a byte stream.
     ///
-    /// Given a cursor reference within a network packet and a 4-byte segment that potentially contains
-    /// VLAN tagging information (Q-tag) and EtherType, this function discerns whether a VLAN tag is
-    /// present and extracts the EtherType. It adjusts the cursor position based on the presence of the
-    /// VLAN tag.
+    /// This function parses the destination and source MAC addresses, optional VLAN tag (QTag),
+    /// and EtherType from the provided byte stream accessed via a cursor.
     ///
-    /// The function operates by examining the two higher-order bytes of `q_tag_ether_bytes` for the
-    /// VLAN TPID. If the TPID indicates a VLAN tag, the tag is extracted along with the EtherType.
-    /// If not, the cursor is adjusted, assuming the two bytes are part of the EtherType, not a VLAN tag.
-    ///
-    /// # Arguments
-    ///
-    /// * `cursor` - A mutable reference to a cursor positioned at the relevant segment
-    ///  of a network packet data slice.
-    /// * `q_tag_ether_bytes` - A 32-bit value possibly containing a VLAN tag and EtherType,
-    ///  specifically the two bytes for the potential tag and two bytes for the EtherType.
+    /// # Parameters
+    /// * `cursor`: A mutable reference to a cursor over the byte slice containing the Ethernet frame.
     ///
     /// # Returns
+    /// * `Ok((MacAddress, MacAddress, Option<u32>, EtherType))`: A tuple containing the destination MAC
+    ///   address, the source MAC address, an optional VLAN tag (QTag), and the EtherType if successful.
+    /// * `Err(ParserError)`: An error if the header could not be parsed, which could be due to
+    ///   insufficient data, unrecognized EtherType, or other parsing issues.
     ///
-    /// This function returns a tuple containing two elements wrapped in `Result`:
-    /// * `Option<u32>` - The VLAN tag present as a 32-bit value, or `None` if a VLAN tag isn't found.
-    /// * `u16` - The 16-bit EtherType value extracted from the packet data.
-    fn parse_vlan_tag_and_ether_type(
+    /// # Errors
+    /// This function will return an error if the byte slice does not contain enough data for a
+    /// complete Ethernet header, if the EtherType is not one of the accepted types, or if any
+    /// other parsing issue occurs.
+    fn extract_header(
         cursor: &mut Cursor<&[u8]>,
-        q_tag_ether_bytes: u32,
-    ) -> Result<(Option<u32>, u16), ParserError> {
-        let (q_tag, ether_type) = match q_tag_ether_bytes >> 16 {
+    ) -> Result<(MacAddress, MacAddress, Option<u32>, EtherType), ParserError> {
+        let bytes = read_u128(cursor, "Ethernet_Header")?;
+        let mac_dest = Self::extract_mac_address(((bytes >> 80) & 0xFFFFFFFFFFFF) as u64);
+        let mac_src = Self::extract_mac_address(((bytes >> 32) & 0xFFFFFFFFFFFF) as u64);
+        let leftover_bytes = (bytes & 0xFFFFFFFF) as u32;
+
+        let (q_tag, ether_type) = match leftover_bytes >> 16 {
             TPID_VLAN => {
-                let e_t = read_u16(cursor, "Ether Type")?;
-                (Some(q_tag_ether_bytes & BITMASK_Q_TAG), e_t)
+                let ether_type = read_u16(cursor, "Ether_Type")?;
+                (Some(leftover_bytes), ether_type)
             }
             _ => {
                 // QTag isn't present in the frame, hence we move the cursor
                 // back 2 positions.
                 cursor.set_position(cursor.position() - 2);
-                (None, (q_tag_ether_bytes >> 16) as u16)
+                (None, (leftover_bytes >> 16) as u16)
             }
         };
 
@@ -225,41 +205,43 @@ impl EthernetFrame {
             return Err(ParserError::InvalidEtherType);
         }
 
-        Ok((q_tag, ether_type))
+        Ok((mac_dest, mac_src, q_tag, EtherType::from(ether_type)))
     }
 
-    /// Extracts a MAC address from the ethernet frame based on a specified offset.
+    /// Extracts a MAC address from a 64-bit integer.
     ///
-    /// The function attempts to retrieve a MAC address, typically used for
-    /// either source or destination MAC extraction, starting from the given offset.
+    /// The MAC address is assumed to be in the lower 48 bits of the value,
+    /// in big-endian order. This function reads the individual bytes that
+    /// make up the MAC address and returns a `MacAddress` instance.
     ///
     /// # Arguments
     ///
-    /// * `frame` - The byte slice representing the ethernet frame.
-    /// * `offset` - Starting index within `frame` where the MAC address is expected to begin.
+    /// * `value` - A `u64` value containing the MAC address in its lower 48 bits.
     ///
     /// # Returns
     ///
-    /// * `Ok` with the MAC address as a byte array if extraction is successful.
-    /// * `Err` with an associated `EthernetFrameError` detailing the cause of the failure.
-    ///
-    /// # Errors
-    ///
-    /// * `EthernetFrameError::InvalidMacBytes` if the frame doesn't contain
-    /// enough bytes from the offset to extract a MAC address.
-    /// * `EthernetFrameError::MacAddressExtractionError` if there's an issue
-    ///  during the extraction process.
-    fn extract_mac_address(frame: &[u8], offset: usize) -> Result<[u8; 6], ParserError> {
-        if frame.len() < offset + 6 {
-            return Err(ParserError::InvalidLength);
-        }
+    /// A `MacAddress` instance created from the extracted bytes.
+    fn extract_mac_address(value: u64) -> MacAddress {
+        // The MAC address lies in the 48 LSBs.
+        let bytes: [u8; 6] = [
+            ((value >> 40) & 0xFF) as u8,
+            ((value >> 32) & 0xFF) as u8,
+            ((value >> 24) & 0xFF) as u8,
+            ((value >> 16) & 0xFF) as u8,
+            ((value >> 8) & 0xFF) as u8,
+            (value & 0xFF) as u8,
+        ];
 
-        frame[offset..offset + 6]
-            .try_into()
-            .map_err(|e| ParserError::ExtractionError {
-                source: ErrorSource::TryFromSlice(e),
-                string: "Src/Dest MAC Address".to_string(),
-            })
+        MacAddress::from_bytes(bytes)
+    }
+
+    fn data_size(frame_size: usize, q_tag: Option<u32>) -> usize {
+        let header_size_without_q_tag = 14; // Header size (excluding the VLAN field) is 14 bytes
+        let vlan_tag_size = q_tag.map_or(0, |_| 4); // VLAN tag is 4 bytes if present
+        let fcs_size = 4; // Frame Check Sequence is 4 bytes
+
+        // Calculate payload size by subtracting the header size and FCS from the frame size
+        frame_size - (header_size_without_q_tag + vlan_tag_size + fcs_size)
     }
 }
 

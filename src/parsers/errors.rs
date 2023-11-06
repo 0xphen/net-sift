@@ -53,4 +53,7 @@ pub enum ParserError {
 
     #[error("Unknown ether type type")]
     UnSupportedEtherType,
+
+    #[error("Exceeded MAC range `{0}`")]
+    MacRangeExceeded(u128),
 }
