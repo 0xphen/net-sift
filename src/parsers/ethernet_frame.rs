@@ -21,7 +21,7 @@ use super::{
     errors::ParserError,
     ipv4::Ipv4Packet,
     ipv6::Ipv6Packet,
-    utils::{read_arbitrary_length, read_u128, read_u16, read_u32},
+    utils::{read_arbitrary_length, read_u128, read_u16},
 };
 
 use std::fmt;
