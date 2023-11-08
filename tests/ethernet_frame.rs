@@ -53,7 +53,7 @@ struct EthernetFrameValues {
 fn can_parse_ethernet_frame_without_qtag() {
     let frame = generate_ethernet_mock_packets(None, DEFAULT_ETHER_TYPE);
 
-    let ethernet_frame = EthernetFrame::from_bytes(&frame).unwrap();
+    let ethernet_frame = EthernetFrame::from_bytes(&frame, true).unwrap();
 
     let expected_values = EthernetFrameValues {
         expected_mac_destination_string: "0C:19:3C:FF:58:0C",
@@ -72,7 +72,7 @@ fn can_parse_ethernet_frame_without_qtag() {
 fn can_parse_ethernet_frame_with_qtag() {
     let frame = generate_ethernet_mock_packets(Some(DEFAULT_Q_TAG), DEFAULT_ETHER_TYPE);
 
-    let ethernet_frame = EthernetFrame::from_bytes(&frame).unwrap();
+    let ethernet_frame = EthernetFrame::from_bytes(&frame, true).unwrap();
 
     let expected_values = EthernetFrameValues {
         expected_mac_destination_string: "0C:19:3C:FF:58:0C",
@@ -91,14 +91,14 @@ fn can_parse_ethernet_frame_with_qtag() {
 fn fails_if_bad_ether_type() {
     let frame = generate_ethernet_mock_packets(None, INVALID_ETHER_TYPE);
 
-    let result = EthernetFrame::from_bytes(&frame);
+    let result = EthernetFrame::from_bytes(&frame, true);
 
     assert!(matches!(result, Err(ParserError::InvalidEtherType)))
 }
 
 #[test]
 fn fails_if_frame_is_malformed() {
-    let result = EthernetFrame::from_bytes(&MOCK_MALFORMED_PACKET);
+    let result = EthernetFrame::from_bytes(&MOCK_MALFORMED_PACKET, true);
     assert!(matches!(result, Err(ParserError::InvalidLength)))
 }
 
@@ -106,7 +106,7 @@ fn fails_if_frame_is_malformed() {
 fn can_parse_layered_data() {
     let frame = generate_ethernet_mock_packets(Some(DEFAULT_Q_TAG), DEFAULT_ETHER_TYPE);
 
-    let ethernet_frame = EthernetFrame::from_bytes(&frame).unwrap();
+    let ethernet_frame = EthernetFrame::from_bytes(&frame, true).unwrap();
     let layered_data = ethernet_frame.parse_next_layer().unwrap();
 
     match layered_data {

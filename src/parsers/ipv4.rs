@@ -103,6 +103,7 @@ impl Ipv4Packet {
     /// - `Result<IPV4, ParserError>`: An `IPV4` instance if the parsing was successful,
     /// or an error indicating the reason for failure.
     pub fn from_bytes(packets: &[u8]) -> Result<Self, ParserError> {
+        println!("IPV4 len(): {}", packets.len());
         // Ensure packet is of minimum expected length.
         if packets.len() < MIN_PACKET_SIZE {
             return Err(ParserError::InvalidLength);
@@ -213,7 +214,10 @@ impl Ipv4Packet {
         }
 
         let payload_size = total_length - (internet_header_length as u16 * 4);
-
+        println!(
+            "IPV4 payload_size, total_length, internet_header_length: {} {} {}",
+            payload_size, total_length, internet_header_length
+        );
         payload = read_arbitrary_length(cursor, payload_size as usize, "IPV4_Data")?;
 
         Ok((options, payload))

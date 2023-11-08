@@ -107,37 +107,27 @@ pub struct EthernetFrame {
 }
 
 impl EthernetFrame {
-    /// Constructs an `EthernetFrame` from the given raw byte data.
+    /// Constructs an `EthernetFrame` from a slice of bytes.
     ///
-    /// This function parses the raw byte data representing an Ethernet frame,
-    /// extracts relevant parts (such as MAC addresses, potential Q-tag, and EtherType),
-    /// and returns an `EthernetFrame` instance.
-    ///
-    /// The function expects the raw data to be structured according to standard Ethernet
-    /// frame formats and checks for the presence of an IEEE 802.1Q VLAN tag (Q-tag).
-    /// If such a tag is detected, it adjusts the extraction offsets accordingly.
+    /// This function parses the bytes to form an Ethernet frame, accounting for the presence
+    /// of an optional VLAN tag and an optional Frame Check Sequence (FCS).
     ///
     /// # Arguments
     ///
-    /// * `data` - A `Vec<u8>` containing the raw byte data of the Ethernet
-    /// frame. The vector
-    ///   should at least contain bytes representing destination MAC, source
-    /// MAC, and EtherType.
-    ///   If a Q-tag is present, the vector's length should account for it as
-    /// well.
-    ///
-    /// # Panics
-    ///
-    /// The function will panic in the following scenarios:
-    ///
-    /// * If the provided data does not have the expected minimum length.
-    /// * If the data structure doesn't match expected positions for MAC
-    /// addresses or EtherType.
+    /// * `frame`: A byte slice representing the Ethernet frame.
+    /// * `fcs_enabled`: A boolean indicating whether the FCS should be expected and parsed.
     ///
     /// # Returns
     ///
-    /// Returns an `EthernetFrame` instance populated with the extracted data.
-    pub fn from_bytes(frame: &[u8]) -> Result<Self, ParserError> {
+    /// A `Result` which is `Ok` containing the `EthernetFrame` if the byte slice
+    /// could be parsed successfully, or an `Err` with `ParserError` if parsing fails.
+    ///
+    /// # Errors
+    ///
+    /// * `ParserError::InvalidLength`: If the byte slice is shorter than the minimum frame size.
+    /// * Other `ParserError` variants as determined by `extract_header` and `read_arbitrary_length`.
+    ///
+    pub fn from_bytes(frame: &[u8], fcs_enabled: bool) -> Result<Self, ParserError> {
         if frame.len() < constants::MIN_FRAME_SIZE {
             return Err(ParserError::InvalidLength);
         }
@@ -147,7 +137,7 @@ impl EthernetFrame {
 
         let data = read_arbitrary_length(
             &mut cursor,
-            Self::data_size(frame.len(), q_tag),
+            Self::data_size(frame.len(), q_tag, fcs_enabled),
             "EtherFrame_Data",
         )?;
 
@@ -235,10 +225,10 @@ impl EthernetFrame {
         MacAddress::from_bytes(bytes)
     }
 
-    fn data_size(frame_size: usize, q_tag: Option<u32>) -> usize {
+    fn data_size(frame_size: usize, q_tag: Option<u32>, fcs_enabled: bool) -> usize {
         let header_size_without_q_tag = 14; // Header size (excluding the VLAN field) is 14 bytes
         let vlan_tag_size = q_tag.map_or(0, |_| 4); // VLAN tag is 4 bytes if present
-        let fcs_size = 4; // Frame Check Sequence is 4 bytes
+        let fcs_size = if fcs_enabled { 4 } else { 0 }; // Frame Check Sequence is 4 bytes
 
         // Calculate payload size by subtracting the header size and FCS from the frame size
         frame_size - (header_size_without_q_tag + vlan_tag_size + fcs_size)
