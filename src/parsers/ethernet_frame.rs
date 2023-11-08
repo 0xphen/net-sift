@@ -110,12 +110,19 @@ impl EthernetFrame {
     /// Constructs an `EthernetFrame` from a slice of bytes.
     ///
     /// This function parses the bytes to form an Ethernet frame, accounting for the presence
-    /// of an optional VLAN tag and an optional Frame Check Sequence (FCS).
+    /// of an optional VLAN tag and an optional Frame Check Sequence (FCS). The `fcs_enabled` flag
+    /// indicates whether the parser should expect and parse the FCS. This flag is needed because
+    /// the inclusion of the FCS in the captured packet data can vary depending on the network interface
+    /// configuration. Some network setups or packet capture software may strip the FCS during
+    /// capture, hence the need for a flag to accommodate both scenarios.
     ///
     /// # Arguments
     ///
     /// * `frame`: A byte slice representing the Ethernet frame.
     /// * `fcs_enabled`: A boolean indicating whether the FCS should be expected and parsed.
+    ///  This is necessary  because not all packet captures include the FCS.
+    ///  It is typically stripped by the NIC before packet data is passed to the capturing
+    /// software, and only  included if the capture setup explicitly preserves it.
     ///
     /// # Returns
     ///
