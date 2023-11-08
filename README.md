@@ -37,7 +37,8 @@ use net_sift::parsers::{ethernet_frame::EthernetFrame, errors::ParserError};
 
 // A function that attempts to parse an Ethernet frame from a slice of bytes.
 fn shallow_parse_ether_frame(packet_data: &[u8]) -> Result<EthernetFrame, ParserError> {
-    EthernetFrame::from_bytes(packet_data)
+    let fcs_enabled = true;
+    EthernetFrame::from_bytes(packet_data, fcs_enabled)
 }
 
 fn main() {
@@ -65,7 +66,8 @@ use net_sift::parsers::{ethernet_frame::EthernetFrame, errors::ParserError, defi
 
 // A function that attempts to parse an Ethernet frame and all embedded packets
 fn deep_parse_ether_frame(packet_data: &[u8]) -> Result<LayeredData, ParserError> {
-    let ether_frame = EthernetFrame::from_bytes(packet_data)?;
+    let fcs_enabled = true;
+    let ether_frame = EthernetFrame::from_bytes(packet_data, fcs_enabled)?;
     ether_frame.parse_next_layer()
 }
 
