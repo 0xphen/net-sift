@@ -57,7 +57,7 @@ impl UdpDatagram {
     /// * The indicated packet length is inconsistent with the actual data length.
     pub fn from_bytes(packets: &[u8]) -> Result<Self, ParserError> {
         if packets.len() < DATA_OFFSET_OR_MIN_SIZE {
-            return Err(ParserError::InvalidLength);
+            return Err(ParserError::InvalidLength("UDP datagram".to_string()));
         }
 
         let mut cursor = Cursor::new(packets);

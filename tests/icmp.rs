@@ -32,5 +32,6 @@ fn can_parse_layered_data() {
 #[test]
 fn fails_if_packet_is_malformed() {
     let result = IcmpPacket::from_bytes(&[9, 12, 34, 5]);
-    assert!(matches!(result, Err(ParserError::InvalidLength)))
+    let s = String::from("ICMP packet");
+    assert!(matches!(result, Err(ParserError::InvalidLength(s))))
 }

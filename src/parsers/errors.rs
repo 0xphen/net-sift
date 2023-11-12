@@ -42,8 +42,8 @@ pub enum ParserError {
     #[error("Invalid EtherType")]
     InvalidEtherType,
 
-    #[error("Invalid packet/segment length")]
-    InvalidLength,
+    #[error("Invalid packet/segment length `{0}`")]
+    InvalidLength(String),
 
     #[error("Expected payload data")]
     InvalidPayload,

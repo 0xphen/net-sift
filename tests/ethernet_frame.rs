@@ -99,7 +99,9 @@ fn fails_if_bad_ether_type() {
 #[test]
 fn fails_if_frame_is_malformed() {
     let result = EthernetFrame::from_bytes(&MOCK_MALFORMED_PACKET, true);
-    assert!(matches!(result, Err(ParserError::InvalidLength)))
+
+    let s = String::from("Ethernet Frame");
+    assert!(matches!(result, Err(ParserError::InvalidLength(s))))
 }
 
 #[test]

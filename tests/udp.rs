@@ -21,7 +21,8 @@ fn can_create_udp() {
 #[test]
 fn fails_if_packet_is_malformed() {
     let result = UdpDatagram::from_bytes(&[9, 12, 34, 5]);
-    assert!(matches!(result, Err(ParserError::InvalidLength)))
+    let s = String::from("UDP datagram");
+    assert!(matches!(result, Err(ParserError::InvalidLength(s))))
 }
 
 #[test]

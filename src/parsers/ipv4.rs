@@ -105,7 +105,7 @@ impl Ipv4Packet {
     pub fn from_bytes(packets: &[u8]) -> Result<Self, ParserError> {
         // Ensure packet is of minimum expected length.
         if packets.len() < MIN_PACKET_SIZE {
-            return Err(ParserError::InvalidLength);
+            return Err(ParserError::InvalidLength("Ipv4 packet".to_string()));
         }
         let mut cursor = Cursor::new(packets);
 

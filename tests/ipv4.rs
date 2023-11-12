@@ -107,7 +107,8 @@ fn can_parse_ipv4_packet_with_options() {
 #[test]
 fn fails_if_packet_is_malformed() {
     let result = Ipv4Packet::from_bytes(&MOCK_MALFORMED_PACKET);
-    assert!(matches!(result, Err(ParserError::InvalidLength)))
+    let s = String::from("Ipv4 packet");
+    assert!(matches!(result, Err(ParserError::InvalidLength(s))))
 }
 
 #[test]

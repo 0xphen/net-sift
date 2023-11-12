@@ -136,7 +136,7 @@ impl EthernetFrame {
     ///
     pub fn from_bytes(frame: &[u8], fcs_enabled: bool) -> Result<Self, ParserError> {
         if frame.len() < constants::MIN_FRAME_SIZE {
-            return Err(ParserError::InvalidLength);
+            return Err(ParserError::InvalidLength("Ethernet Frame".to_string()));
         }
         let mut cursor: Cursor<&[u8]> = Cursor::new(frame);
 

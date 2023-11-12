@@ -95,7 +95,7 @@ pub struct TcpSegment {
 impl TcpSegment {
     pub fn from_bytes(segments: &[u8]) -> Result<Self, ParserError> {
         if segments.len() < MIN_SEGMENT_SIZE {
-            return Err(ParserError::InvalidLength);
+            return Err(ParserError::InvalidLength("TCP segment".to_string()));
         }
         let mut cursor = Cursor::new(segments);
 

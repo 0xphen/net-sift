@@ -86,7 +86,7 @@ impl Ipv6Packet {
     pub fn from_bytes(packets: &[u8]) -> Result<Self, ParserError> {
         // Ensure packet is of minimum expected length.
         if packets.len() < MIN_PACKET_SIZE {
-            return Err(ParserError::InvalidLength);
+            return Err(ParserError::InvalidLength("Ipv6 packet".to_string()));
         }
         let mut cursor = Cursor::new(packets);
 
@@ -224,7 +224,7 @@ impl Ipv6Packet {
     /// Returns `Ok([u16; 8])` representing the IPv6 address if the extraction succeeds.
     fn extract_ipv6_address(frame: &[u8], offset: usize) -> Result<[u16; 8], ParserError> {
         if frame.len() < offset + 16 {
-            return Err(ParserError::InvalidLength);
+            return Err(ParserError::InvalidLength("Ipv4 address".to_string()));
         }
 
         // Extracting 16 bytes from the frame for the IPv6 address.
