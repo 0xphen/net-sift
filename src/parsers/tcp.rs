@@ -109,7 +109,7 @@ impl TcpSegment {
         let (checksum, urg_pointer) = Self::extract_tcp_checksum_urg_pointer(&mut cursor)?;
 
         // Get the size of the options field
-        let options_size = (data_offset * 32) / 8 - MIN_SEGMENT_SIZE as u8;
+        let options_size = (data_offset * 4) - MIN_SEGMENT_SIZE as u8; // data_offset is in 32-bit words
 
         let payload_offset = match options_size {
             0 => OPTIONS_OFFSET,
