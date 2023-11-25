@@ -3,17 +3,19 @@
 This library offers an efficient and adaptable network packet parser, with a minimal reliance on external dependencies. It is designed to parse and verify an extensive array of essential network protocols, including ethernet frames, IPv4, IPv6, UDP, TCP, among others. The focus of development is centered on the dominant protocols found in the internet and transport layers.
 
 ## Supported Protocols:
-- :heavy_check_mark: supported.
-- 🏗️ under construction.
+## Protocols
 
-| Protocol  | Supported        |
-| -------------- | ------------------ |
-| Ethernet Frame | :heavy_check_mark: |
-| IPv4    | :heavy_check_mark:          |
-|IPv6 | :heavy_check_mark: |
-| TCP (Transmission Control Protocol) |  :heavy_check_mark:         |
-| UDP (User Datagram Protocol) |  :heavy_check_mark:        
-| ICMP (Internet Control Message Protocol) |  :heavy_check_mark:           |
+- [X] ethernet
+- [X] ipv4
+- [X] ipv6
+- [X] tcp
+- [X] udp
+- [X] icmp
+- [ ] http
+- [ ] tls
+- [ ] dns
+- [ ] dhcp
+- [ ] arp
 
 ## Building
 To install the latest version of `net-sift`, ensure you have [Rust toolchain installed](https://rustup.rs/), then run:
