@@ -3,7 +3,6 @@
 This library offers an efficient and adaptable network packet parser, with a minimal reliance on external dependencies. It is designed to parse and verify an extensive array of essential network protocols, including ethernet frames, IPv4, IPv6, UDP, TCP, among others. The focus of development is centered on the dominant protocols found in the internet and transport layers.
 
 ## Supported Protocols:
-## Protocols
 
 - [X] ethernet
 - [X] ipv4
