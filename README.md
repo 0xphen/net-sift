@@ -17,11 +17,7 @@ This library offers an efficient and adaptable network packet parser, with a min
 - [ ] arp
 
 ## Building
-To install the latest version of `net-sift`, ensure you have [Rust toolchain installed](https://rustup.rs/), then run:
-```
-cargo install net-sift
-```
-Or, to build from source (binary in `target/release/net-sift`):
+Build from source (binary in `target/release/net-sift`):
 ```
 cargo build --release
 ```
