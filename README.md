@@ -16,12 +16,6 @@ This library offers an efficient and adaptable network packet parser, with a min
 - [ ] dhcp
 - [ ] arp
 
-## Building
-Build from source (binary in `target/release/net-sift`):
-```
-cargo build --release
-```
-
 ## Usage
 Net-sift supports both shallow packet parsing (decoding standalone network protocols), and deep packet inspection (parsing and decoding layered network hierarchies).
 
